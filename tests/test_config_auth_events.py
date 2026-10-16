@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 import pytest
-from gigaam_zoom.config import Settings, SecretStore, meeting_id, subscription_url
+from gigaam_zoom.config import Settings, SecretStore, meeting_id, subscription_url, meeting_origin
 from gigaam_zoom.auth import ZoomAPI, ZoomError, pkce_pair
 from gigaam_zoom.events import WebhookReceiver, verify_webhook
 
@@ -66,6 +66,14 @@ def test_pkce_s256():
     import base64
     assert 43 <= len(verifier) <= 128
     assert challenge == base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+
+
+def test_optional_actual_meeting_start():
+    from datetime import datetime, timezone
+    assert meeting_origin("") is None
+    assert meeting_origin("16.10.2026 20:00:00") == int(datetime(2026, 10, 16, 15, tzinfo=timezone.utc).timestamp() * 1000)
+    with pytest.raises(ValueError):
+        meeting_origin("bad time")
 
 
 def test_login_rejects_wrong_state_then_accepts_valid_callback():
@@ -139,5 +147,29 @@ def test_webhook_timestamp_signature_and_real_http_crc_dedup():
             post(event, valid=False)
         assert error.value.code == 401
         assert not verify_webhook(b"{}", "1", sign(b"{}", "1"), "example")
+    finally:
+        receiver.stop()
+
+
+def test_failed_webhook_callback_can_be_redelivered():
+    attempts = []
+    def callback(event):
+        attempts.append(event)
+        if len(attempts) == 1:
+            raise RuntimeError("Simulated transient failure")
+    receiver = WebhookReceiver("example", callback, port=0)
+    receiver.start()
+    body = json.dumps({"event": "meeting.rtms_started", "payload": {"meeting_id": "123456789"}}).encode()
+    stamp = str(int(time.time()))
+    def request():
+        return urlopen(Request(f"http://127.0.0.1:{receiver.port}/webhook", data=body,
+            headers={"x-zm-request-timestamp": stamp, "x-zm-signature": sign(body, stamp)}), timeout=3)
+    try:
+        with pytest.raises(HTTPError) as error:
+            request()
+        assert error.value.code == 503
+        with request() as response:
+            assert response.status == 200
+        assert len(attempts) == 2
     finally:
         receiver.stop()

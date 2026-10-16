@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 from ctypes import wintypes
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone, timedelta
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,16 @@ def meeting_id(value: str) -> str:
     if not value.isascii() or not value.isdigit() or not 9 <= len(value) <= 11:
         raise ValueError("ID встречи должен содержать 9–11 цифр.")
     return value
+
+
+def meeting_origin(value: str) -> int | None:
+    if not value.strip():
+        return None
+    try:
+        actual = datetime.strptime(value.strip(), "%d.%m.%Y %H:%M:%S").replace(tzinfo=timezone(timedelta(hours=5)))
+    except ValueError:
+        raise ValueError("Начало встречи: ДД.ММ.ГГГГ ЧЧ:ММ:СС, время UTC+05:00. Можно оставить пустым.") from None
+    return round(actual.timestamp() * 1000)
 
 
 def subscription_url(value: str) -> str:

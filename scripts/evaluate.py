@@ -225,6 +225,10 @@ def main():
                           "logical_cpus": os.cpu_count(), "python": platform.python_version()},
               "versions": versions, "model_revision": MODEL_REVISION, "code_revision": CODE_REVISION,
               "model_sha256": MODEL_FILES, "samples": []}
+    report["implementation_sha256"] = {
+        name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+        for name in ("gigaam_zoom/engine.py", "gigaam_zoom/pipeline.py", "gigaam_zoom/store.py", "scripts/evaluate.py")
+    }
     engine = Transcriber(args.model_dir)
     with no_python_network() as network:
         with Measurement() as load_measurement:

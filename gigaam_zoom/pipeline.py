@@ -20,7 +20,10 @@ from .models import AudioPacket, Segment, Word
 from .store import Store
 
 WINDOW_SECONDS = 8.0
-OVERLAP_SECONDS = 1.0
+# Two seconds preserve enough acoustic context for short Kazakh windows. A
+# public FLEURS clip moved one CTC word by 680ms with a one-second overlap.
+# Wider context reduces that measured drift without deleting text by equality.
+OVERLAP_SECONDS = 2.0
 PAUSE_SECONDS = 1.2
 QUIET_RMS = 0.0001
 TIMESTAMP_TOLERANCE = 0.002
@@ -404,6 +407,7 @@ class Pipeline:
                     self._retire_locked(key)
             except (sqlite3.Error, OSError):
                 self._storage_failure()
+            self._work_seconds = self._inflight_seconds = 0.0
             self._closed = True
         self._emit("stopped", self.metrics)
 

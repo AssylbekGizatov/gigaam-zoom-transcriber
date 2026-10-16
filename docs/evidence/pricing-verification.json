@@ -1,0 +1,13 @@
+{
+  "checked_on": "2026-10-16",
+  "source": "https://zoom.us/pricing/developer",
+  "method": "Visible browser Developer Pack Rates dialog; screenshot visually inspected",
+  "currency": "USD",
+  "rtms_without_transcripts_per_session_streaming_minute": 0.01,
+  "rtms_with_transcripts_per_session_streaming_minute": 0.02,
+  "selected_integration": "audio only, no Zoom transcript scope",
+  "account_balance_verified": false,
+  "account_contract_rate_verified": false,
+  "billing_authorized": false,
+  "limits": "Public list rate only. Taxes, rounding, credit balance, contract terms and overage must be checked before paid use."
+}

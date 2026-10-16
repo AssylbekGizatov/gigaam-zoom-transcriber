@@ -1,0 +1,320 @@
+{
+  "created_at_utc": "2026-10-16T18:27:13.820965+00:00",
+  "scope": "Public read-speech smoke tests and synthetic concatenation, not a benchmark",
+  "live_zoom_meeting_tested": false,
+  "natural_code_switching_tested": false,
+  "simultaneous_speech_tested": false,
+  "machine": {
+    "os": "Windows",
+    "release": "11",
+    "architecture": "AMD64",
+    "processor": "Intel64 Family 6 Model 165 Stepping 2, GenuineIntel",
+    "logical_cpus": 8,
+    "python": "3.12.3"
+  },
+  "versions": {
+    "numpy": "2.2.6",
+    "torch": "2.10.0+cpu",
+    "torchaudio": "2.10.0+cpu",
+    "gigaam": "0.2.0",
+    "python-docx": "1.2.0",
+    "reportlab": "4.4.9"
+  },
+  "model_revision": "2f8a57144e6ec3adfd32fe0484d9ea9913305bc8",
+  "code_revision": "7447938d791c4f3e643386ee22c33777004293a5",
+  "model_sha256": {
+    "config.json": "c830232c7d51688a630a221517b52585ab5ee57e1d3c21bcbae01759351d2653",
+    "pytorch_model.bin": "e1db43873ec5e296f229572e06e2470fc157ac9f8d4aacabda295630b9b91728"
+  },
+  "samples": [
+    {
+      "fixture": {
+        "language": "kk",
+        "reference": "ішкі су жолдары демалыс үшін жақсы тақырып болуы мүмкін",
+        "source_url": "https://storage.googleapis.com/xtreme_translations/FLEURS102/kk_kz.tar.gz",
+        "source_archive_member": "kk_kz/audio/dev/3173551583057762018.wav",
+        "source_sha256": "ba9b9bd7929c1599847812f9773c2bfc019016fad0ba27e85b0e474238f312d0",
+        "license": "CC BY 4.0",
+        "license_source": "https://huggingface.co/datasets/google/fleurs",
+        "attribution": "FLEURS (Conneau et al., 2022), Google, https://arxiv.org/abs/2205.12446",
+        "selection": "First WAV archive member, matched dev.tsv; chosen before model inference",
+        "modifications": "Original float32 mono 16 kHz WAV converted to PCM16; no trimming or resampling",
+        "sha256": "b2ac9e019a37da61c3a072100a30bf1f4b89c956656dd6ef430871b17c27c140"
+      },
+      "duration_seconds": 11.58,
+      "engine_runs": [
+        {
+          "hypothesis": "ішкі су жолдары демалыс үшін жақсы тақырып болуы мүмкін",
+          "reference_words": 9,
+          "word_edits": 0,
+          "wer": 0.0,
+          "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+          "measurement": {
+            "wall_seconds": 2.1906933999999865,
+            "process_cpu_seconds": 6.75,
+            "cpu_percent_one_core": 308.12162030524405,
+            "cpu_percent_machine": 38.515202538155506,
+            "sampled_peak_rss_mib": 1906.48046875,
+            "rss_sampling_interval_seconds": 0.05,
+            "real_time_factor": 0.1891790500863546
+          },
+          "word_timestamps_valid": true
+        }
+      ],
+      "pipeline": {
+        "pace": "realtime",
+        "hypothesis": "ішкі су жолдары демалыс үшін жақсы тақырып болуы мүмкін",
+        "reference_words": 9,
+        "word_edits": 0,
+        "wer": 0.0,
+        "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+        "measurement": {
+          "wall_seconds": 11.81827880000003,
+          "process_cpu_seconds": 8.5,
+          "cpu_percent_one_core": 71.92248671608576,
+          "cpu_percent_machine": 8.99031083951072,
+          "sampled_peak_rss_mib": 1891.75390625,
+          "rss_sampling_interval_seconds": 0.05,
+          "real_time_factor": 1.020576753022455
+        },
+        "pipeline_metrics": {
+          "audio_seconds": 13.56,
+          "inference_seconds": 1.7336375999999518,
+          "peak_pending_seconds": 10.98,
+          "dropped_seconds": 0.0,
+          "windows": 3,
+          "segments": 2,
+          "last_result_delay_seconds": 0.2340000000000373,
+          "pending_seconds": 0.0,
+          "active_sources": 0,
+          "real_time_factor": 0.1278493805309699
+        },
+        "segment_count": 2,
+        "speaker_ids": [
+          "public-source-1"
+        ],
+        "timestamps_valid": true,
+        "gap_count": 0,
+        "events": [
+          "stopped"
+        ],
+        "first_result_wall_seconds": 9.025862899999993,
+        "result_after_utterance_end_seconds": [
+          2.4458628999999927,
+          2.333655099999996
+        ],
+        "latency_scope": "Local paced public PCM input to final segment callback; excludes Zoom/network"
+      }
+    },
+    {
+      "fixture": {
+        "language": "ru",
+        "reference": "ничьих не требуя похвал счастлив уж я надеждой сладкой что дева с трепетом любви посмотрит может быть украдкой на песни грешные мои у лукоморья дуб зеленый",
+        "source_url": "https://cdn.chatwm.opensmodel.sberdevices.ru/GigaAM/example.wav",
+        "license": "Official public GigaAM example in MIT repository; public-domain Pushkin reference",
+        "license_source": "https://github.com/salute-developers/GigaAM",
+        "attribution": "salute-developers GigaAM official public example; text by Alexander Pushkin",
+        "modifications": "none",
+        "reference_scope": "Pinned upstream expected text, not an independent annotation",
+        "sha256": "d8aaaa18a5098d7c6de0595ae7ac1e64cacd0d4022af3595213bdaf23be77e69"
+      },
+      "duration_seconds": 11.29,
+      "engine_runs": [
+        {
+          "hypothesis": "ничьих не требуя похвал счастлив уж я надеждой сладкой что дева с трепетом любви посмотрит может быть украдкой на песни грешные мои у лукоморья дуб зеленый",
+          "reference_words": 26,
+          "word_edits": 0,
+          "wer": 0.0,
+          "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+          "measurement": {
+            "wall_seconds": 1.69144289999997,
+            "process_cpu_seconds": 6.15625,
+            "cpu_percent_one_core": 363.96439986239614,
+            "cpu_percent_machine": 45.49554998279952,
+            "sampled_peak_rss_mib": 1896.234375,
+            "rss_sampling_interval_seconds": 0.05,
+            "real_time_factor": 0.14981779450841187
+          },
+          "word_timestamps_valid": true
+        }
+      ],
+      "pipeline": {
+        "pace": "realtime",
+        "hypothesis": "ничьих не требуя похвал счастлив уж я надеждой сладкой что дева с трепетом любви посмотрит может быть украдкой на песни грешные мои у лукоморья дуб зеленый",
+        "reference_words": 26,
+        "word_edits": 0,
+        "wer": 0.0,
+        "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+        "measurement": {
+          "wall_seconds": 12.385061000000064,
+          "process_cpu_seconds": 8.765625,
+          "cpu_percent_one_core": 70.77579189961159,
+          "cpu_percent_machine": 8.846973987451449,
+          "sampled_peak_rss_mib": 1889.0078125,
+          "rss_sampling_interval_seconds": 0.05,
+          "real_time_factor": 1.096993888396817
+        },
+        "pipeline_metrics": {
+          "audio_seconds": 13.29,
+          "inference_seconds": 2.4598272999999153,
+          "peak_pending_seconds": 11.3,
+          "dropped_seconds": 0.0,
+          "windows": 2,
+          "segments": 2,
+          "last_result_delay_seconds": 1.0930000000000746,
+          "pending_seconds": 0.0,
+          "active_sources": 0,
+          "real_time_factor": 0.18508858540255196
+        },
+        "segment_count": 2,
+        "speaker_ids": [
+          "public-source-1"
+        ],
+        "timestamps_valid": true,
+        "gap_count": 0,
+        "events": [
+          "stopped"
+        ],
+        "first_result_wall_seconds": 9.36845859999994,
+        "result_after_utterance_end_seconds": [
+          2.40845859999994,
+          1.4947783757576047
+        ],
+        "latency_scope": "Local paced public PCM input to final segment callback; excludes Zoom/network"
+      }
+    },
+    {
+      "fixture": {
+        "language": "en",
+        "reference": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
+        "source_url": "https://huggingface.co/datasets/hf-internal-testing/librispeech_asr_dummy/tree/5be91486e11a2d616f4ec5db8d3fd248585ac07a",
+        "source_sample_id": "1272-128104-0000",
+        "license": "CC BY 4.0",
+        "license_source": "https://www.openslr.org/12/",
+        "attribution": "LibriSpeech ASR corpus (Vassil Panayotov, Guoguo Chen, Daniel Povey, Sanjeev Khudanpur, ICASSP 2015), CC BY 4.0, https://www.openslr.org/12/ . One unchanged recording from the Hugging Face Internal Testing LibriSpeech dummy subset; dataset loader links the original OpenSLR corpus.",
+        "modifications": "lossless FLAC decoded to PCM16 WAV; no resampling or trimming",
+        "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46"
+      },
+      "duration_seconds": 5.855,
+      "engine_runs": [
+        {
+          "hypothesis": "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+          "reference_words": 17,
+          "word_edits": 0,
+          "wer": 0.0,
+          "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+          "measurement": {
+            "wall_seconds": 0.9436689000000342,
+            "process_cpu_seconds": 3.578125,
+            "cpu_percent_one_core": 379.1716564994216,
+            "cpu_percent_machine": 47.3964570624277,
+            "sampled_peak_rss_mib": 1900.23828125,
+            "rss_sampling_interval_seconds": 0.05,
+            "real_time_factor": 0.16117316823228595
+          },
+          "word_timestamps_valid": true
+        }
+      ],
+      "pipeline": {
+        "pace": "realtime",
+        "hypothesis": "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+        "reference_words": 17,
+        "word_edits": 0,
+        "wer": 0.0,
+        "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+        "measurement": {
+          "wall_seconds": 6.895983900000033,
+          "process_cpu_seconds": 4.09375,
+          "cpu_percent_one_core": 59.36426272688921,
+          "cpu_percent_machine": 7.420532840861151,
+          "sampled_peak_rss_mib": 1901.609375,
+          "rss_sampling_interval_seconds": 0.05,
+          "real_time_factor": 1.1777940051238314
+        },
+        "pipeline_metrics": {
+          "audio_seconds": 5.855,
+          "inference_seconds": 1.0384956999999986,
+          "peak_pending_seconds": 5.855,
+          "dropped_seconds": 0.0,
+          "windows": 1,
+          "segments": 1,
+          "last_result_delay_seconds": 1.0470000000000255,
+          "pending_seconds": 0.0,
+          "active_sources": 0,
+          "real_time_factor": 0.17736903501280932
+        },
+        "segment_count": 1,
+        "speaker_ids": [
+          "public-source-1"
+        ],
+        "timestamps_valid": true,
+        "gap_count": 0,
+        "events": [
+          "stopped"
+        ],
+        "first_result_wall_seconds": 6.89441869999996,
+        "result_after_utterance_end_seconds": [
+          1.5206515767122877
+        ],
+        "latency_scope": "Local paced public PCM input to final segment callback; excludes Zoom/network"
+      }
+    }
+  ],
+  "cold_model_load": {
+    "wall_seconds": 13.446820800000069,
+    "process_cpu_seconds": 12.265625,
+    "cpu_percent_one_core": 91.21579875594041,
+    "cpu_percent_machine": 11.401974844492551,
+    "sampled_peak_rss_mib": 1897.7421875,
+    "rss_sampling_interval_seconds": 0.05,
+    "real_time_factor": null
+  },
+  "synthetic_mixed_pipeline": {
+    "pace": "realtime",
+    "hypothesis": "ішкі су жолдары демалыс үшін жақсы тақырып болуы мүмкін ничьих не требуя похвал счастлив уж я надеждой сладкой что дева с трепетом любви посмотрит может быть украдкой на песни грешные мои у лукоморья дуб зеленый миsтеr кuilter is the apostle of the middle classes and we are glad to welcome his gospel",
+    "reference_words": 52,
+    "word_edits": 2,
+    "wer": 0.038461538461538464,
+    "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+    "measurement": {
+      "wall_seconds": 30.476425500000005,
+      "process_cpu_seconds": 21.953125,
+      "cpu_percent_one_core": 72.0331359069652,
+      "cpu_percent_machine": 9.00414198837065,
+      "sampled_peak_rss_mib": 1910.19921875,
+      "rss_sampling_interval_seconds": 0.05,
+      "real_time_factor": 1.0235575314861463
+    },
+    "pipeline_metrics": {
+      "audio_seconds": 35.535,
+      "inference_seconds": 5.286627299999964,
+      "peak_pending_seconds": 11.48,
+      "dropped_seconds": 0.0,
+      "windows": 6,
+      "segments": 5,
+      "last_result_delay_seconds": 0.7029999999999745,
+      "pending_seconds": 0.0,
+      "active_sources": 0,
+      "real_time_factor": 0.14877240185732277
+    },
+    "segment_count": 5,
+    "speaker_ids": [
+      "public-source-1"
+    ],
+    "timestamps_valid": true,
+    "gap_count": 0,
+    "events": [
+      "stopped"
+    ],
+    "first_result_wall_seconds": 9.506997800000022,
+    "result_after_utterance_end_seconds": [
+      2.926997800000022,
+      2.3797188000001004,
+      2.519944200000051,
+      1.964961200000019,
+      1.5021675945205786
+    ],
+    "latency_scope": "Local paced public PCM input to final segment callback; excludes Zoom/network"
+  },
+  "blocked_python_network_attempts": 0
+}

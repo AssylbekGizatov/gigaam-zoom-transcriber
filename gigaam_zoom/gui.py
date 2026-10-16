@@ -9,7 +9,7 @@ from tkinter import ttk, filedialog, messagebox
 import webbrowser
 
 from .auth import ZoomAPI, ZoomError
-from .config import Settings, SecretStore
+from .config import Settings, SecretStore, meeting_origin
 from .controller import Controller
 from .exports import EXPORT_FORMATS, export_transcript, default_export_name, format_time
 from .store import Store
@@ -37,6 +37,7 @@ class Application:
         self.status = tk.StringVar(value="Локальный тест. Zoom ещё не подключён.")
         self.account = tk.StringVar(value="Аккаунт не подключён")
         self.meeting = tk.StringVar()
+        self.meeting_start = tk.StringVar()
         self.folder = tk.StringVar(value=self.settings.export_dir)
         self.consent = tk.BooleanVar()
         self.billing = tk.BooleanVar()
@@ -90,6 +91,11 @@ class Application:
         ttk.Label(folder_line, text="Папка сеанса и экспорта").pack(side="left")
         ttk.Entry(folder_line, textvariable=self.folder).pack(side="left", fill="x", expand=True, padx=8)
         ttk.Button(folder_line, text="Выбрать…", command=self.choose_folder).pack(side="right")
+        clock_line = ttk.Frame(session)
+        clock_line.pack(fill="x", pady=(7, 0))
+        ttk.Label(clock_line, text="Фактическое начало встречи (UTC+05)").pack(side="left")
+        ttk.Entry(clock_line, textvariable=self.meeting_start, width=23).pack(side="left", padx=8)
+        ttk.Label(clock_line, text="ДД.ММ.ГГГГ ЧЧ:ММ:СС · пусто = отсчёт от включения RTMS").pack(side="left")
         ttk.Checkbutton(session, text="Участники уведомлены; у меня есть разрешение получать и сохранять звук и текст этой встречи.",
                         variable=self.consent).pack(anchor="w", pady=(10, 3))
         ttk.Checkbutton(session, text="Для этого сеанса разрешаю RTMS расходовать Developer Pack кредиты по тарифу моего Zoom-аккаунта.",
@@ -106,7 +112,7 @@ class Application:
         ttk.Label(session, textvariable=self.status, wraplength=990, foreground="#155b79").pack(anchor="w", fill="x", pady=9)
         table_frame = ttk.Frame(session)
         table_frame.pack(fill="both", expand=True)
-        self.table = ttk.Treeview(table_frame, columns=("time", "person", "status", "text"), show="headings")
+        self.table = ttk.Treeview(table_frame, columns=("time", "person", "status", "text"), show="headings", height=6)
         for key, label, width in (("time", "Время от начала RTMS", 170), ("person", "Имя · Zoom ID / источник", 220),
                                   ("status", "Статус", 85), ("text", "Текст", 520)):
             self.table.heading(key, text=label)
@@ -116,11 +122,11 @@ class Application:
         self.table.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
         self.table.bind("<<TreeviewSelect>>", self.show_selected)
-        self.detail = tk.Text(session, height=3, wrap="word", font=("Segoe UI", 10), state="disabled")
-        self.detail.pack(fill="x", pady=6)
+        self.detail = tk.Text(session, height=2, wrap="word", font=("Segoe UI", 10), state="disabled")
+        self.detail.pack(side="bottom", before=table_frame, fill="x", pady=6)
         footer = ttk.Frame(session)
-        footer.pack(fill="x")
-        ttk.Label(footer, text="Окно показывает последние 500 реплик; весь текст хранится в локальном SQLite.").pack(side="left")
+        footer.pack(side="bottom", before=self.detail, fill="x")
+        ttk.Label(footer, text="Последние 500 реплик · весь текст хранится в локальном SQLite.", wraplength=530).pack(side="left")
         ttk.Combobox(footer, textvariable=self.format, values=EXPORT_FORMATS, width=7, state="readonly").pack(side="left", padx=8)
         self.export_button = ttk.Button(footer, text="Экспорт…", command=self.export)
         self.export_button.pack(side="right")
@@ -230,7 +236,8 @@ class Application:
         if not self.save():
             return
         try:
-            self.controller.start(self.meeting.get(), consent=self.consent.get(), billing_consent=self.billing.get())
+            self.controller.start(self.meeting.get(), consent=self.consent.get(), billing_consent=self.billing.get(),
+                                  meeting_origin_ms=meeting_origin(self.meeting_start.get()))
             self.rows.clear()
             self.table.delete(*self.table.get_children())
             self.start_button.configure(state="disabled")

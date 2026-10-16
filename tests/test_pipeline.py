@@ -154,14 +154,47 @@ class PipelineTests(unittest.TestCase):
             def transcribe_words(self, samples, rate):
                 self.calls += 1
                 if self.calls == 1:
-                    return [Word(7.2, 7.4, "да"), Word(7.6, 7.8, "сейчас")]
-                return [Word(.2, .4, "да"), Word(.6, .8, "сейчас"), Word(1.2, 1.4, "проверяем")]
+                    return [Word(6.7, 6.9, "да"), Word(7.2, 7.4, "сейчас")]
+                return [Word(.7, .9, "да"), Word(1.2, 1.4, "сейчас"), Word(2.2, 2.4, "проверяем")]
         pipeline = self.make(OverlapEngine())
         pipeline.feed(packet(seconds=8))
         pipeline.feed(packet(ms=18000, seconds=2))
         pipeline.stop()
         self.assertEqual([s.text for s in self.store.iter_segments()], ["да", "сейчас проверяем"])
         self.assertEqual(pipeline.metrics["windows"], 2)
+
+    def test_captured_kazakh_ctc_seam_is_deferred_with_more_audio_context(self):
+        # Word timings were measured with the pinned real model on public
+        # FLEURS kk dev/3173551583057762018.wav. The old 1s context shifted
+        # тақырып by .68s and could not be safely text-deduplicated. The 2s
+        # context keeps it within the deferred ownership region instead.
+        class CapturedEngine:
+            calls = 0
+            def transcribe_words(self, samples, rate):
+                self.calls += 1
+                if self.calls == 1:
+                    return [Word(6.24, 6.56, "жақсы"), Word(7.08, 7.44, "тақырып"), Word(7.56, 7.76, "болу")]
+                return [Word(.44, .68, "жақсы"), Word(1.2, 1.56, "тақырып"),
+                        Word(1.8, 2.16, "болуы"), Word(2.4, 2.72, "мүмкін")]
+        pipeline = self.make(CapturedEngine())
+        pipeline.feed(packet(seconds=8))
+        pipeline.feed(packet(ms=18000, seconds=2))
+        pipeline.stop()
+        self.assertEqual(" ".join(s.text for s in self.store.iter_segments()), "жақсы тақырып болуы мүмкін")
+
+    def test_real_repeated_word_inside_retained_pcm_remains_two_words(self):
+        class RepeatedEngine:
+            calls = 0
+            def transcribe_words(self, samples, rate):
+                self.calls += 1
+                if self.calls == 1:
+                    return [Word(6.2, 6.5, "да"), Word(7.2, 7.5, "да")]
+                return [Word(.2, .5, "да"), Word(1.2, 1.5, "да"), Word(2.0, 2.3, "верно")]
+        pipeline = self.make(RepeatedEngine())
+        pipeline.feed(packet(seconds=8))
+        pipeline.feed(packet(ms=18000, seconds=2))
+        pipeline.stop()
+        self.assertEqual(" ".join(s.text for s in self.store.iter_segments()), "да да верно")
 
     def test_legitimate_repeated_phrase_after_flush_is_not_text_deduplicated(self):
         pipeline = self.make()

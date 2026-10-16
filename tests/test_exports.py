@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from gigaam_zoom.exports import EXPORT_FORMATS, export_transcript, format_time
@@ -119,13 +120,24 @@ class ExportTests(unittest.TestCase):
             store = Store(Path(directory) / "public-test.sqlite3")
             store.append(Segment("1", "zoom-source", "Participant", 1, 2, "test"))
             store.gap("zoom-source", 2, 3, "reconnect", "epoch2")
+            store.participant_event("zoom-source", "Participant", "join", "epoch2", 1000)
+            store.participant_event("zoom-source", "Renamed", "rename", "epoch2", 2000)
             path = export_transcript(store, Path(directory) / "export.json", "JSON")
             data = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(data["timing"], "rtms_session_seconds")
             self.assertEqual(data["events"][0]["reason"], "reconnect")
+            self.assertEqual(data["participants"][0]["speaker_id"], "zoom-source")
+            participant_events = [event for event in data["events"] if event["kind"] == "participant_event"]
+            self.assertEqual(len(participant_events), 2)
+            self.assertEqual(participant_events[-1]["display_name"], "Renamed")
             store.set_metadata("time_basis", "meeting")
             path = export_transcript(store, Path(directory) / "meeting-time.json", "JSON")
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["timing"], "meeting_seconds")
+            store.set_metadata("time_basis", "first_audio")
+            path = export_transcript(store, Path(directory) / "first-audio.json", "JSON")
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["timing"], "first_audio_seconds")
+            self.assertIn("первого полученного аудиопакета", data["note"])
             store.close()
 
     def test_docx_contains_unicode_and_ids(self):
@@ -140,6 +152,20 @@ class ExportTests(unittest.TestCase):
             self.assertIn("Қазақ тілі", xml)
             self.assertIn("zoom:1", xml)
             self.assertNotIn("DO_NOT_EXPORT", xml)
+
+    def test_document_export_limits_clean_up_partial_files(self):
+        try:
+            import docx  # noqa: F401
+            import reportlab  # noqa: F401
+        except ImportError:
+            self.skipTest("Document export dependencies unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            for kind, constant in (("DOCX", "MAX_DOCX_CHARACTERS"), ("PDF", "MAX_PDF_PAGES")):
+                path = Path(directory) / ("bounded." + kind.lower())
+                with patch("gigaam_zoom.exports." + constant, 1):
+                    with self.assertRaises(ValueError):
+                        export_transcript(FakeStore(30), path, kind)
+                self.assertFalse(path.exists())
 
     def test_pdf_contains_embedded_unicode_font_and_multiple_pages(self):
         try:

@@ -1,0 +1,38 @@
+{
+  "validated_at_client_date": "2026-10-16",
+  "scope": "Generated public test content only, not private meeting audio",
+  "formats": ["TXT", "MD", "JSON", "DOCX", "PDF"],
+  "unicode": "Kazakh Ә Ғ Қ Ң Ө Ұ Ү Һ І, Russian and English",
+  "pdf": {
+    "renderer": "Codex bundled Poppler pdftoppm",
+    "pages": 2,
+    "all_pages_visually_inspected": true,
+    "embedded_font": "DejaVu Sans",
+    "observed_missing_glyphs": false,
+    "observed_clipping_or_overlap": false,
+    "label_kept_with_following_text": true,
+    "note": "Poppler emitted optional nameToUnicode data-file lookup warnings; both page PNGs rendered and were inspected"
+  },
+  "docx": {
+    "ooxml_unicode_ids_and_secret_exclusion_checked": true,
+    "renderer": "Microsoft Word COM ExportAsFixedFormat, source opened read-only; PDF rasterized by bundled Poppler",
+    "pages": 2,
+    "rendered": true,
+    "visual_qa_complete": true,
+    "all_pages_visually_inspected": true,
+    "observed_missing_glyphs": false,
+    "observed_clipping_or_overlap": false,
+    "label_kept_with_following_text": true,
+    "fallback_note": "Bundled documents render_docx.py lacked soffice.exe; installed Microsoft Word provided the verified conversion fallback",
+    "font": "Arial"
+  },
+  "bounded_exports": {
+    "txt_markdown_json": "Streaming iter_segments, one pass, tested with 20000 segments",
+    "docx_max_characters": 2000000,
+    "pdf_max_pages": 1000,
+    "limit_behavior": "Actionable error recommends TXT or JSON, deletes only the newly created partial file"
+  },
+  "local_destination": "Explicit existing local folder; rejects UNC, URI and mapped network drives via config.local_directory",
+  "overwrite_behavior": "Exclusive x/xb create; existing files never replaced",
+  "clock_basis": "RTMS session by default; meeting basis only when explicitly recorded in store metadata"
+}

@@ -48,6 +48,7 @@ def make(monkeypatch, tmp_path):
     c = module.Controller(Settings(client_id="example", public_client_id="public", model_dir=str(tmp_path),
         export_dir=str(tmp_path)), Vault(), lambda kind, payload: events.append((kind, payload)))
     c._active_id = "123456789"
+    monkeypatch.setattr(c, "ensure_receiver", lambda: None)
     return c, events
 
 
@@ -121,3 +122,30 @@ def test_no_background_start_without_both_consents(monkeypatch, tmp_path):
         with pytest.raises(module.ZoomError):
             c.start("123456789", consent=consent, billing_consent=billing)
         assert not c.running
+
+
+def test_receiver_recreated_when_secret_or_port_changes(monkeypatch, tmp_path):
+    created = []
+    class Receiver:
+        def __init__(self, secret, event, port):
+            self.secret, self.port, self.stopped = secret, port, False
+            created.append(self)
+        def start(self):
+            pass
+        def stop(self):
+            self.stopped = True
+    monkeypatch.setattr(module, "WebhookReceiver", Receiver)
+    class MutableVault(Vault):
+        secret = "one"
+        def load(self):
+            return {"webhook_secret": self.secret}
+    vault = MutableVault()
+    c = module.Controller(Settings(), vault, lambda *_: None)
+    c.ensure_receiver()
+    first = c.receiver
+    c.ensure_receiver()
+    assert c.receiver is first
+    vault.secret = "two"
+    c.ensure_receiver()
+    assert first.stopped and c.receiver.secret == "two"
+    c.close()

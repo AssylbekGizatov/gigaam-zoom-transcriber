@@ -159,6 +159,29 @@ class Store:
                 ORDER BY id DESC LIMIT 1""", (user_id, epoch)).fetchone()
         return row[0] if row else None
 
+    def iter_participants(self):
+        """Observed speaker/name snapshots, grouped by actual source identity."""
+        with self._lock:
+            cursor = self._db.execute("""SELECT speaker_id,source_epoch,display_name,
+                MIN(start) AS first_speech,MAX(end) AS last_speech FROM segments
+                GROUP BY speaker_id,source_epoch,display_name ORDER BY first_speech""")
+        while True:
+            with self._lock:
+                rows = cursor.fetchmany(256)
+            if not rows:
+                break
+            yield from (dict(row) for row in rows)
+
+    def iter_participant_events(self):
+        with self._lock:
+            cursor = self._db.execute("SELECT user_id,display_name,event,source_epoch,timestamp_ms FROM participant_events ORDER BY id")
+        while True:
+            with self._lock:
+                rows = cursor.fetchmany(256)
+            if not rows:
+                break
+            yield from (dict(row) for row in rows)
+
     def set_source_cursor(self, user_id: str, epoch: str, end: float) -> None:
         with self._lock, self._db:
             self._db.execute("""INSERT INTO source_cursors VALUES (?,?,?)

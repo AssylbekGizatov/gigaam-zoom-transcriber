@@ -16,6 +16,8 @@ import sys
 from typing import Any, Iterable
 
 EXPORT_FORMATS = ("TXT", "MD", "DOCX", "PDF", "JSON")
+MAX_DOCX_CHARACTERS = 2_000_000
+MAX_PDF_PAGES = 1000
 TITLE = "Транскрипция встречи Zoom"
 TIMING_NOTE = (
     "Метки реплик приблизительные. "
@@ -90,14 +92,20 @@ def _events(store: Any) -> Iterable[dict]:
     if hasattr(store, "iter_events"):
         for event in store.iter_events():
             yield _safe_metadata(_mapping(event))
+        return  # A unified event stream already owns participant/gap events.
     elif hasattr(store, "iter_gaps"):
         for event in store.iter_gaps():
             yield {"kind": "audio_gap", **_safe_metadata(_mapping(event))}
+    if hasattr(store, "iter_participant_events"):
+        for event in store.iter_participant_events():
+            yield {"kind": "participant_event", **_safe_metadata(_mapping(event))}
 
 
 def _timing_note(metadata: dict) -> str:
     if metadata.get("time_basis") == "meeting":
         origin = "Время отсчитывается от подтверждённого начала встречи Zoom. "
+    elif metadata.get("time_basis") == "first_audio":
+        origin = "Время отсчитывается от первого полученного аудиопакета; начало сессии RTMS и встречи неизвестно. "
     else:
         origin = "Время отсчитывается от начала локально получаемой сессии RTMS, а не от начала всей встречи. "
     return origin + TIMING_NOTE
@@ -128,7 +136,8 @@ def _text(store: Any, stream: Any, markdown: bool, metadata: dict) -> None:
 
 def _json(store: Any, stream: Any, metadata: dict) -> None:
     stream.write('{"schema_version":1,"timing":')
-    json.dump("meeting_seconds" if metadata.get("time_basis") == "meeting" else "rtms_session_seconds", stream)
+    json.dump({"meeting": "meeting_seconds", "first_audio": "first_audio_seconds"}.get(
+        metadata.get("time_basis"), "rtms_session_seconds"), stream)
     stream.write(',"note":')
     json.dump(_timing_note(metadata), stream, ensure_ascii=False)
     stream.write(',"metadata":')
@@ -140,6 +149,14 @@ def _json(store: Any, stream: Any, metadata: dict) -> None:
             stream.write(",")
         first = False
         json.dump(_record(value), stream, ensure_ascii=False, allow_nan=False)
+    stream.write('],"participants":[')
+    first = True
+    if hasattr(store, "iter_participants"):
+        for participant in store.iter_participants():
+            if not first:
+                stream.write(",")
+            first = False
+            json.dump(_safe_metadata(_mapping(participant)), stream, ensure_ascii=False, allow_nan=False)
     stream.write('],"events":[')
     first = True
     for event in _events(store):
@@ -226,12 +243,16 @@ def _pdf(store: Any, stream: Any, metadata: dict) -> None:
             footer()
             canvas.showPage()
             page += 1
+            if page > MAX_PDF_PAGES:
+                raise ValueError("PDF превышает 1000 страниц. Экспортируйте длинную встречу в TXT или JSON.")
             y = height - margin
         for line in _wrapped(paragraph, width - 2 * margin, font, size):
             if y - size * 1.4 < bottom:
                 footer()
                 canvas.showPage()
                 page += 1
+                if page > MAX_PDF_PAGES:
+                    raise ValueError("PDF превышает 1000 страниц. Экспортируйте длинную встречу в TXT или JSON.")
                 y = height - margin
             canvas.setFont(font, size)
             canvas.drawString(margin, y, line)
@@ -249,11 +270,11 @@ def _docx(store: Any, stream: Any, metadata: dict) -> None:
     section.top_margin = section.bottom_margin = Inches(0.7)
     section.left_margin = section.right_margin = Inches(0.75)
     normal = document.styles["Normal"]
-    normal.font.name = "DejaVu Sans"
+    normal.font.name = "Arial"
     normal.font.size = Pt(11)
     normal.paragraph_format.space_after = Pt(7)
     title = document.styles["Title"]
-    title.font.name = "DejaVu Sans"
+    title.font.name = "Arial"
     title.font.size = Pt(20)
     title.font.color.rgb = RGBColor(0, 0, 0)
     document.core_properties.title = TITLE
@@ -261,7 +282,11 @@ def _docx(store: Any, stream: Any, metadata: dict) -> None:
     document.core_properties.last_modified_by = ""
     document.core_properties.comments = ""
     first = True
+    characters = 0
     for text, size in _lines(store, metadata):
+        characters += len(text)
+        if characters > MAX_DOCX_CHARACTERS:
+            raise ValueError("DOCX превышает 2 миллиона символов. Экспортируйте длинную встречу в TXT или JSON.")
         if first:
             document.add_paragraph(text, style="Title")
             first = False

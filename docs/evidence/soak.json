@@ -1,0 +1,368 @@
+{
+  "kind": "accelerated_generated_pcm_fake_asr_soak",
+  "recorded_at_utc": "2026-10-16T18:28:29.189440+00:00",
+  "passed": true,
+  "scope": {
+    "real_zoom_meeting": false,
+    "real_asr": false,
+    "wall_clock_8_hours": false,
+    "description": "Accelerated 8-second generated PCM chunks, one active source at a time, rotating 3 source IDs. Local SQLite persistence and recent(500) reads. No model, credentials, network, or personal transcript.",
+    "limitation": "Empirical bounded-retention check; not an 8-hour wall-clock stability, Zoom networking, recognition accuracy, or GigaAM throughput measurement."
+  },
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.3",
+    "logical_cpu_count": 8
+  },
+  "configuration": {
+    "timeline_hours": 8.0,
+    "sources": 3,
+    "pcm_rate_hz": 16000,
+    "pcm_channels": 1,
+    "chunk_seconds": 8,
+    "producer_wait_above_pending_seconds": 16,
+    "pipeline_pending_limit_seconds": 48,
+    "recent_rows_limit": 500
+  },
+  "measurements": {
+    "timeline_seconds": 28800.0,
+    "packets": 3600,
+    "real_runtime_seconds": 45.755,
+    "producer_pacing_wait_seconds": 5.338,
+    "process_cpu_seconds": 40.516,
+    "process_cpu_percent_one_core": 88.55,
+    "rss_initial_mib": 31.668,
+    "rss_after_first_100_packets_mib": 34.539,
+    "rss_final_mib": 34.641,
+    "rss_peak_observed_mib": 38.703,
+    "rss_delta_after_warmup_mib": 0.102,
+    "max_pending_observed_seconds": 26.0,
+    "max_pending_internal_seconds": 26.0,
+    "pending_after_stop_seconds": 0.0,
+    "refused_packets": 0,
+    "dropped_seconds": 0.0,
+    "segments_saved": 7200,
+    "source_ids": [
+      "100",
+      "101",
+      "102"
+    ],
+    "last_segment_end_seconds": 28799.3,
+    "max_recent_rows": 500,
+    "recent_rows_after_stop": 500,
+    "sqlite_initial_with_wal_bytes": 139896,
+    "sqlite_final_with_wal_bytes": 6045296,
+    "sqlite_final_checkpointed_bytes": 1921024,
+    "gap_reason_counts": {
+      "transport_gap": 3597
+    }
+  },
+  "pipeline_metrics_fake_asr_only": {
+    "audio_seconds": 36000.0,
+    "inference_seconds": 43.97812600000168,
+    "peak_pending_seconds": 26.0,
+    "dropped_seconds": 0.0,
+    "windows": 7200,
+    "segments": 7200,
+    "last_result_delay_seconds": 0.01599999999996271,
+    "pending_seconds": 0.0,
+    "active_sources": 0,
+    "real_time_factor": 0.0012216146111111578
+  },
+  "event_counts": {
+    "segment": 7200,
+    "progress": 7200,
+    "gap": 3597,
+    "stopped": 1
+  },
+  "samples": [
+    {
+      "timeline_seconds": 800.0,
+      "real_elapsed_seconds": 1.649,
+      "rss_mib": 34.539,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 3110416,
+      "segments_published": 195
+    },
+    {
+      "timeline_seconds": 1600.0,
+      "real_elapsed_seconds": 2.917,
+      "rss_mib": 34.871,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 4279824,
+      "segments_published": 395
+    },
+    {
+      "timeline_seconds": 2400.0,
+      "real_elapsed_seconds": 4.273,
+      "rss_mib": 35.215,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4353600,
+      "segments_published": 594
+    },
+    {
+      "timeline_seconds": 3200.0,
+      "real_elapsed_seconds": 5.453,
+      "rss_mib": 34.734,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 4410944,
+      "segments_published": 795
+    },
+    {
+      "timeline_seconds": 4000.0,
+      "real_elapsed_seconds": 6.631,
+      "rss_mib": 34.836,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 4472384,
+      "segments_published": 995
+    },
+    {
+      "timeline_seconds": 4800.0,
+      "real_elapsed_seconds": 7.928,
+      "rss_mib": 35.309,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4472384,
+      "segments_published": 1194
+    },
+    {
+      "timeline_seconds": 5600.0,
+      "real_elapsed_seconds": 9.512,
+      "rss_mib": 34.848,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 4537920,
+      "segments_published": 1395
+    },
+    {
+      "timeline_seconds": 6400.0,
+      "real_elapsed_seconds": 10.609,
+      "rss_mib": 35.469,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4599360,
+      "segments_published": 1594
+    },
+    {
+      "timeline_seconds": 7200.0,
+      "real_elapsed_seconds": 12.109,
+      "rss_mib": 34.961,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 4660824,
+      "segments_published": 1795
+    },
+    {
+      "timeline_seconds": 8000.0,
+      "real_elapsed_seconds": 13.581,
+      "rss_mib": 36.465,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4718168,
+      "segments_published": 1994
+    },
+    {
+      "timeline_seconds": 8800.0,
+      "real_elapsed_seconds": 14.751,
+      "rss_mib": 36.32,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 4787800,
+      "segments_published": 2195
+    },
+    {
+      "timeline_seconds": 9600.0,
+      "real_elapsed_seconds": 15.873,
+      "rss_mib": 36.676,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4787800,
+      "segments_published": 2394
+    },
+    {
+      "timeline_seconds": 10400.0,
+      "real_elapsed_seconds": 17.09,
+      "rss_mib": 36.617,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4853336,
+      "segments_published": 2594
+    },
+    {
+      "timeline_seconds": 11200.0,
+      "real_elapsed_seconds": 18.198,
+      "rss_mib": 36.793,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4914776,
+      "segments_published": 2794
+    },
+    {
+      "timeline_seconds": 12000.0,
+      "real_elapsed_seconds": 19.414,
+      "rss_mib": 36.82,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 4968024,
+      "segments_published": 2994
+    },
+    {
+      "timeline_seconds": 12800.0,
+      "real_elapsed_seconds": 21.006,
+      "rss_mib": 36.902,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5033560,
+      "segments_published": 3195
+    },
+    {
+      "timeline_seconds": 13600.0,
+      "real_elapsed_seconds": 22.317,
+      "rss_mib": 36.949,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5095000,
+      "segments_published": 3395
+    },
+    {
+      "timeline_seconds": 14400.0,
+      "real_elapsed_seconds": 23.41,
+      "rss_mib": 36.715,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5095000,
+      "segments_published": 3595
+    },
+    {
+      "timeline_seconds": 15200.0,
+      "real_elapsed_seconds": 24.521,
+      "rss_mib": 37.027,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5160536,
+      "segments_published": 3794
+    },
+    {
+      "timeline_seconds": 16000.0,
+      "real_elapsed_seconds": 25.65,
+      "rss_mib": 37.172,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5217880,
+      "segments_published": 3994
+    },
+    {
+      "timeline_seconds": 16800.0,
+      "real_elapsed_seconds": 26.786,
+      "rss_mib": 37.406,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5279320,
+      "segments_published": 4194
+    },
+    {
+      "timeline_seconds": 17600.0,
+      "real_elapsed_seconds": 27.931,
+      "rss_mib": 37.414,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5340760,
+      "segments_published": 4394
+    },
+    {
+      "timeline_seconds": 18400.0,
+      "real_elapsed_seconds": 29.658,
+      "rss_mib": 37.586,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5406296,
+      "segments_published": 4594
+    },
+    {
+      "timeline_seconds": 19200.0,
+      "real_elapsed_seconds": 30.988,
+      "rss_mib": 37.711,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5406296,
+      "segments_published": 4795
+    },
+    {
+      "timeline_seconds": 20000.0,
+      "real_elapsed_seconds": 32.358,
+      "rss_mib": 38.258,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5463640,
+      "segments_published": 4994
+    },
+    {
+      "timeline_seconds": 20800.0,
+      "real_elapsed_seconds": 33.538,
+      "rss_mib": 37.918,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5525080,
+      "segments_published": 5194
+    },
+    {
+      "timeline_seconds": 21600.0,
+      "real_elapsed_seconds": 34.668,
+      "rss_mib": 37.785,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5598832,
+      "segments_published": 5395
+    },
+    {
+      "timeline_seconds": 22400.0,
+      "real_elapsed_seconds": 35.794,
+      "rss_mib": 37.906,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5660272,
+      "segments_published": 5595
+    },
+    {
+      "timeline_seconds": 23200.0,
+      "real_elapsed_seconds": 36.894,
+      "rss_mib": 37.727,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5717616,
+      "segments_published": 5795
+    },
+    {
+      "timeline_seconds": 24000.0,
+      "real_elapsed_seconds": 38.002,
+      "rss_mib": 38.156,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5717616,
+      "segments_published": 5994
+    },
+    {
+      "timeline_seconds": 24800.0,
+      "real_elapsed_seconds": 39.14,
+      "rss_mib": 38.141,
+      "pending_seconds": 24.0,
+      "sqlite_and_wal_bytes": 5791344,
+      "segments_published": 6194
+    },
+    {
+      "timeline_seconds": 25600.0,
+      "real_elapsed_seconds": 40.592,
+      "rss_mib": 38.215,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5856880,
+      "segments_published": 6395
+    },
+    {
+      "timeline_seconds": 26400.0,
+      "real_elapsed_seconds": 42.135,
+      "rss_mib": 38.219,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5918320,
+      "segments_published": 6595
+    },
+    {
+      "timeline_seconds": 27200.0,
+      "real_elapsed_seconds": 43.312,
+      "rss_mib": 38.414,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5983856,
+      "segments_published": 6795
+    },
+    {
+      "timeline_seconds": 28000.0,
+      "real_elapsed_seconds": 44.436,
+      "rss_mib": 38.391,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 5983856,
+      "segments_published": 6995
+    },
+    {
+      "timeline_seconds": 28800.0,
+      "real_elapsed_seconds": 45.522,
+      "rss_mib": 38.32,
+      "pending_seconds": 16.0,
+      "sqlite_and_wal_bytes": 6045296,
+      "segments_published": 7195
+    }
+  ]
+}

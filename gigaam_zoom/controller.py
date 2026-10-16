@@ -10,10 +10,10 @@ from uuid import uuid4
 
 from .auth import ZoomAPI, ZoomError
 from .config import meeting_id
-from .engine import Transcriber
+from .engine import Transcriber, EngineError
 from .events import WebhookReceiver, websocket_events
 from .pipeline import Pipeline
-from .rtms import RTMSClient
+from .rtms import RTMSClient, RTMSError
 from .store import Store
 
 
@@ -33,6 +33,7 @@ class Controller:
         self._last_gap_time = None
         self._failed = False
         self._stream_epoch = ""
+        self._meeting_origin_ms = None
 
     @property
     def running(self):
@@ -64,7 +65,7 @@ class Controller:
                     self.stop_event.set()
             self.loop.call_soon_threadsafe(deliver)
 
-    def start(self, value, *, consent=False, billing_consent=False):
+    def start(self, value, *, consent=False, billing_consent=False, meeting_origin_ms=None):
         if self.running:
             raise ZoomError("Сеанс уже запущен.")
         if not consent or not billing_consent:
@@ -74,6 +75,7 @@ class Controller:
         if not folder.is_dir() or str(folder).startswith(("\\\\", "//")):
             raise ZoomError("Выберите существующую локальную папку для сеанса и экспорта.")
         self._active_id = meeting_id(value)
+        self._meeting_origin_ms = meeting_origin_ms
         self._cancel.clear()
         self.thread = threading.Thread(target=self._thread_main, name="zoom-session", daemon=False)
         self.thread.start()
@@ -83,7 +85,7 @@ class Controller:
             asyncio.run(self._run())
         except Exception as error:
             # All lower-level safe errors omit content and credentials.
-            if isinstance(error, (ZoomError, ValueError)):
+            if isinstance(error, (ZoomError, ValueError, EngineError, RTMSError)):
                 message = str(error)
             else:
                 message = "Сеанс прерван. Проверьте модель, настройки Zoom и подключение. См. docs/ZOOM_SETUP.md."
@@ -142,7 +144,9 @@ class Controller:
         self.store.set_metadata("created_at", datetime.now(timezone.utc).isoformat())
         self.store.set_metadata("transport", "Zoom RTMS audio-only PCM16 16kHz individual")
         self.store.set_metadata("shared_microphones", "A Zoom source may include multiple humans; names identify sources only.")
-        self.pipeline = Pipeline(self.store, engine, self._pipeline_event)
+        self.pipeline = Pipeline(self.store, engine, self._pipeline_event, origin_ms=self._meeting_origin_ms)
+        if self._meeting_origin_ms is not None:
+            self.store.set_metadata("clock_origin_kind", "user_supplied_actual_meeting_start")
         self.pipeline.start()
         self._emit("session_created", {"path": str(self.store.path)})
         try:
