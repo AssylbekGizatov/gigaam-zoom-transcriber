@@ -4,11 +4,28 @@
 подавать на review, распространять организации или покупать Enterprise не нужно.
 Публичность GitHub-репозитория не означает публикацию Zoom-приложения.
 
+Состояние личной настройки на 16 октября 2026 года: в **General App Development**
+подтверждён метод **WebSocket** в Access → Event subscriptions; сохранены события
+RTMS Started / Stopped / Interrupted. Public Client OAuth (PKCE) включён. Владелец
+согласовал четыре scopes из таблицы ниже. Идентификаторы приложения, аккаунта,
+подписки и credentials остаются локальными и здесь не публикуются.
+
+На реальном сервисе уже прошли OAuth-авторизация, PKCE loopback callback, обмен
+кода на токены и `users/me` для нужного аккаунта. Credentials сохранены в Windows
+DPAPI. Для Event WebSocket проверены `client_credentials` и успешный
+`build_connection`; одно подключение после настройки IPv6/IPv4 fallback заняло
+0,97 с. Это проверка входа и канала, не доставка lifecycle event из встречи.
+Поток аудио и реальная встреча ещё не проверены. RTMS Start не выполнялся;
+разрешение на расход кредитов не получено.
+[Обезличенный отчёт](evidence/zoom-local-test.json).
+
 ## Что требует отдельного согласия владельца
 
-Создание credentials, новые scopes/постоянные разрешения, Share realtime meeting
-content with apps, публичный HTTPS forwarder, соглашения и любые покупки/списания.
-Разработка и имитационные тесты сами этих действий не выполняют.
+Согласованные четыре scopes, PKCE и три lifecycle-подписки не нужно согласовывать
+заново. Дополнительные scopes/постоянные разрешения, Share realtime meeting
+content with apps, внешний HTTPS forwarder, новые соглашения и любые
+покупки/списания требуют отдельного разрешения. Разработка и имитационные тесты
+сами этих действий не выполняют.
 Начать настоящий RTMS можно только после проверки тарифа Developer Pack и явного
 разрешения расходовать кредиты. Приложение не включает auto-start и автопополнение.
 
@@ -33,24 +50,28 @@ content with apps, публичный HTTPS forwarder, соглашения и �
    Client ID, Public Client ID и Client Secret. Для PKCE redirect URL / allow list:
    `http://127.0.0.1/callback`. Zoom разрешает переменный порт для native/PKCE;
    `localhost` не подставлять. [Официальный OAuth/loopback](https://developers.zoom.us/docs/integrations/oauth/).
-4. В Features / Event Subscriptions добавить **Webhook**: `meeting.rtms_started`,
-   `meeting.rtms_stopped`, по доступности `meeting.rtms_interrupted`.
-   Скопировать Webhook Secret Token в локальное приложение. [RTMS scopes/events](https://developers.zoom.us/docs/rtms/meetings/add-features/).
-5. Запустить приложение → «Разовая настройка», внести значения и путь модели,
-   «Сохранить настройки» → «Включить приёмник webhook». Он слушает только
-   `127.0.0.1:8765`, путь `/webhook`. Windows firewall и TLS не отключать.
-6. Предоставить Zoom **HTTPS URL** выбранного вами forwarder, который пересылает
-   запросы на `http://127.0.0.1:8765`. Конкретный сервис и его условия нужно
-   согласовать. Например, если у вас уже настроен собственный HTTPS reverse proxy,
-   маршрут `/webhook` направляется на этот локальный порт. Для ngrok с уже
-   разрешённым и установленным аккаунтом команда: `ngrok http 8765`, затем
-   `https://<выданный-host>/webhook`. Не включать перехват тела запросов/инспектор:
-   события содержат идентификаторы встречи и параметры подключения. При смене URL
-   нужно изменить и повторно валидировать endpoint в Marketplace.
-7. Нажать Zoom Validate. Получатель проверяет HMAC-SHA256, timestamp (±5 минут),
-   размер запроса и отвечает на CRC challenge. [Официальная проверка webhook](https://developers.zoom.us/docs/api/webhooks/).
+4. В **Access → Event subscriptions** добавить подписку с методом **WebSocket**:
+   `meeting.rtms_started`, `meeting.rtms_stopped`, `meeting.rtms_interrupted`.
+   В текущем личном приложении все три уже сохранены. Скопировать выданный
+   **WebSocket Endpoint URL** в локальные настройки, без добавления access token.
+   Этот account-bound канал работает в своём аккаунте; создавать S2S-приложение
+   не требуется. [Event WebSocket](https://developers.zoom.us/docs/api/websockets/),
+   [события RTMS](https://developers.zoom.us/docs/rtms/meetings/add-features/).
+5. Запустить `app.py` → «Разовая настройка». Внести Client ID, Public Client ID,
+   Client Secret, Endpoint URL и локальную папку модели. В «Доставка событий»
+   выбрать **`websocket`** → «Сохранить настройки». Webhook Secret Token в этом
+   режиме не нужен; поля webhook относятся только к резервному пути.
+6. Нажать **«Проверить события Zoom»**. Приложение получает краткоживущий
+   `client_credentials` token и открывает исходящий WSS с Zoom. Успех означает,
+   что Zoom ответил `build_connection: success`; окно затем закрывает проверочное
+   соединение. Модель, REST Start, RTMS-аудио и расход RTMS-кредитов эта кнопка
+   не запускает. Это ещё не проверка доставки RTMS Started из встречи.
+7. HTTPS endpoint, внешний туннель, Zoom Validate и входящий порт компьютера
+   **для WebSocket не нужны**. Windows firewall и TLS не отключать.
 8. Local Test → добавить **только в свой аккаунт**. Запустить OAuth кнопкой
    «Подключить Zoom в браузере», проверить экран scopes и подтвердить самому.
+   В текущей личной настройке OAuth/PKCE и профиль уже проверены; повторный вход
+   нужен при смене credentials, отзыве или истечении доступа.
 9. Проверить требуемые Zoom Apps / realtime-content настройки аккаунта и встречи.
    Если выключены, изменение требует отдельного согласия. Список мер не повод
    автоматически ослаблять защиту. [Контроль хоста](https://developers.zoom.us/docs/rtms/meetings/ux-host-admin-tools-ctrls/).
@@ -62,9 +83,30 @@ content with apps, публичный HTTPS forwarder, соглашения и �
     аккаунта этим не подтверждены. Если пакет Admin managed, не обходить запрет.
     [Developer pricing](https://zoom.us/pricing/developer).
 
+## Резерв: подписанный HTTPS webhook
+
+Этот путь нужен только при сознательном выборе `webhook` вместо `websocket`.
+Обычный запуск основного режима обходится без него.
+
+1. Выбрать в Zoom HTTP webhook-подписку на те же lifecycle events. Внести
+   Webhook Secret Token в локальное приложение и выбрать доставку `webhook`.
+2. Нажать «Включить приёмник webhook». Он слушает только
+   `http://127.0.0.1:8765/webhook`.
+3. Использовать отдельно согласованный HTTPS forwarder, который направляет
+   `/webhook` на этот порт. Его поставщик и условия требуют отдельного согласия;
+   установку аккаунта, службу Windows и правила firewall приложение не создаёт.
+   При смене публичного URL изменить и повторно валидировать endpoint в Zoom.
+4. Нажать Zoom Validate. Получатель проверяет HMAC-SHA256, timestamp (±5 минут),
+   размер запроса и отвечает на CRC challenge. Не включать запись тела запросов
+   в инспекторе forwarder: события содержат идентификаторы и параметры подключения.
+
+[Официальная проверка webhook](https://developers.zoom.us/docs/api/webhooks/).
+
 ## Ежедневный личный тест
 
-1. Включить HTTPS forwarder, запустить `app.py`, включить приёмник.
+1. Запустить `app.py` с сохранённым режимом **`websocket`**. При изменении
+   credentials/подписки выполнить «Проверить события Zoom»; внешний forwarder
+   и кнопка включения webhook-приёмника в этом режиме не нужны.
 2. Войти обычным Zoom-клиентом в свою тестовую встречу как хост/разрешённый участник.
 3. Указать ID/ссылку и локальную папку. Приложение извлекает только numeric ID:
    passcode из URL не сохраняется.
@@ -84,13 +126,17 @@ content with apps, публичный HTTPS forwarder, соглашения и �
 | OAuth Invalid redirect | Public Client OAuth/PKCE, numeric 127.0.0.1, путь callback и allow list |
 | HTTP 401 | Повторить вход; актуальные локальные credentials |
 | HTTP 403 | Scope, добавление Local Test, разрешение хоста, Developer Pack |
-| Start принят, события нет | Webhook URL, HTTPS forwarder, Validate, HMAC Secret Token и часы Windows |
+| Event WebSocket не авторизован | Client ID/Secret того же General App, Endpoint URL сохранённой подписки; Public Client ID используется отдельно для PKCE |
+| Event WebSocket зависает на открытии | Проверка TLS и сети; в приложении включён Happy Eyeballs с задержкой 0,25 с для IPv6/IPv4. TLS и защиту Windows не отключать |
+| Проверка событий успешна, но аудио нет | Это проверка канала; она не запускает RTMS. Проверить разрешения и пакет перед отдельно согласованным Start |
+| Start принят, события нет | Метод и три события подписки, Local Test/OAuth, Developer Pack, разрешение хоста и соединение событий. Для резервного webhook — HTTPS URL, Validate, Secret Token и часы |
 | Есть события, нет audio endpoint | Audio scope и разрешение передачи аудио |
 | Переподключение | Сеть/доступность Zoom; отмеченные пропуски восстановить нельзя |
 | Пропуски из-за CPU | Снизить параллельную нагрузку; сохранить JSON с gaps |
 | Stop не подтверждён | Active Apps → Stop, затем проверить Developer Billing |
 
-Исходящий Event WebSocket реализован как экспериментальный дополнительный модуль,
-но интерфейс использует документированный webhook. Доступность RTMS events для
-WebSocket-подписки конкретного аккаунта не подтверждена; туннель этим обещанием
-не заменяется. [Исследование](ZOOM_RESEARCH.md).
+WebSocket — предпочтительный локальный путь; настройка подписки и живая
+авторизация канала в текущем General App подтверждены. Реальная доставка
+событий и медиа остаётся отдельным приёмочным
+тестом. Во время разрыва этого канала Zoom не сохраняет события для повторной
+доставки. [Исследование и ограничения](ZOOM_RESEARCH.md).

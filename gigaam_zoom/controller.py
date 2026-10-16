@@ -34,6 +34,9 @@ class Controller:
         self._failed = False
         self._stream_epoch = ""
         self._meeting_origin_ms = None
+        self._events_ever_ready = False
+        self._event_delivery_gap = False
+        self._media_established = False
 
     @property
     def running(self):
@@ -102,6 +105,8 @@ class Controller:
             self.stop()
 
     def _transport_event(self, kind, payload):
+        if kind == "connected":
+            self._media_established = True
         if kind in {"participant_joined", "participant_left"}:
             self.pipeline.participant_event(str(payload["user_id"]), payload.get("user_name"),
                 "joined" if kind.endswith("joined") else "left", self._source_epoch(payload.get("epoch", "0")), payload.get("timestamp_ms"))
@@ -118,6 +123,33 @@ class Controller:
             self.stop()
         self._emit(kind, payload)
 
+    def _event_delivery_status(self, kind, payload):
+        if kind == "events_connected":
+            self._events_ever_ready = True
+        elif kind in {"events_reconnecting", "events_renewing"} and self._events_ever_ready:
+            if not self._media_established:
+                # RTMS Start produces one lifecycle event which Zoom doesn't
+                # replay. An outage here may leave a paid stream with no media
+                # URL. Mark the startup failed, but let an in-flight REST Start
+                # finish before the finally block sends Stop.
+                self._event_delivery_gap = True
+                self.stop()
+            elif self.store:
+                try:
+                    recent = self.store.recent(1)
+                    marker = recent[-1].end if recent else 0.0
+                    self.store.gap("unknown", marker, marker,
+                                   "event_delivery_gap_unknown_duration", self._stream_epoch)
+                except Exception:
+                    self._failed = True
+                    self.stop()
+        self._emit(kind, payload)
+
+    @staticmethod
+    def _startup_delivery_error():
+        return ZoomError("Доставка событий Zoom прервалась до подключения аудио. "
+                         "RTMS останавливается; проверьте соединение и повторите запуск.")
+
     def _source_epoch(self, epoch):
         return epoch if epoch.startswith(self._stream_epoch + ":") else self._stream_epoch + ":" + epoch
 
@@ -129,6 +161,9 @@ class Controller:
         stream_task = events_task = None
         self._rtms_started = False
         self._failed = False
+        self._events_ever_ready = False
+        self._event_delivery_gap = False
+        self._media_established = False
         self._emit("loading", {"message": "Проверка SHA256 и загрузка локальной модели…"})
         if self.settings.event_mode == "webhook":
             await asyncio.to_thread(self.ensure_receiver)
@@ -153,13 +188,40 @@ class Controller:
             if self.settings.event_mode == "websocket":
                 ready = asyncio.Event()
                 events_task = asyncio.create_task(websocket_events(self.settings.event_endpoint,
-                    self.api.event_token, self._lifecycle_event, self._emit, self.stop_event, ready))
-                await asyncio.wait_for(ready.wait(), 20)
-            if self._cancel.is_set():
+                    self.api.event_token, self._lifecycle_event, self._event_delivery_status,
+                    self.stop_event, ready))
+                ready_wait = asyncio.create_task(ready.wait())
+                stop_wait = asyncio.create_task(self.stop_event.wait())
+                try:
+                    done, _ = await asyncio.wait([ready_wait, stop_wait, events_task],
+                        timeout=20, return_when=asyncio.FIRST_COMPLETED)
+                    if self._event_delivery_gap:
+                        raise self._startup_delivery_error()
+                    if self.stop_event.is_set() or self._cancel.is_set():
+                        return
+                    if events_task in done:
+                        try:
+                            await events_task
+                        except Exception:
+                            pass
+                        raise ZoomError("Zoom не подтвердил доставку событий. Проверьте соединение и повторите запуск.")
+                    if not ready.is_set():
+                        raise ZoomError("Zoom не подтвердил WebSocket событий за 20 секунд. Повторите подключение.")
+                finally:
+                    for waiter in (ready_wait, stop_wait):
+                        waiter.cancel()
+                    await asyncio.gather(ready_wait, stop_wait, return_exceptions=True)
+                if self._event_delivery_gap or not ready.is_set():
+                    raise self._startup_delivery_error()
+            if self._cancel.is_set() or self.stop_event.is_set():
                 return
             # Set before sending: a lost HTTP response can still mean Zoom started a paid stream.
             self._rtms_started = True
             await asyncio.to_thread(self.api.rtms, self._active_id, "start", billing_consent=True)
+            if self._event_delivery_gap:
+                raise self._startup_delivery_error()
+            if self._cancel.is_set() or self.stop_event.is_set():
+                return
             self._emit("waiting_stream", {"message": "Zoom принял Start. Ожидание подписанного meeting.rtms_started…"})
             waiting_since = time.monotonic()
             while not self.stop_event.is_set() and not self._cancel.is_set():
@@ -173,7 +235,7 @@ class Controller:
                     doc = await asyncio.wait_for(self.events_queue.get(), .25)
                 except asyncio.TimeoutError:
                     if not stream_task and time.monotonic() - waiting_since > 40:
-                        raise ZoomError("RTMS-событие не пришло за 40 секунд. Проверьте HTTPS webhook, подпись и события Marketplace.")
+                        raise ZoomError("RTMS-событие не пришло за 40 секунд. Проверьте подписку на события Marketplace и выбранный канал доставки.")
                     continue
                 event, payload = doc["event"], doc["payload"]
                 if event == "app_deauthorized":
@@ -211,6 +273,8 @@ class Controller:
                     break
                 elif event == "meeting.rtms_interrupted":
                     self._emit("reconnecting", {"message": "Zoom прервал RTMS; возможен пропуск аудио."})
+            if self._event_delivery_gap:
+                raise self._startup_delivery_error()
         finally:
             if self.client:
                 try:

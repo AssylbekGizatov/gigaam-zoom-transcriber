@@ -124,6 +124,164 @@ def test_no_background_start_without_both_consents(monkeypatch, tmp_path):
         assert not c.running
 
 
+def test_stop_while_waiting_event_authorization_is_prompt_and_never_starts_rtms(monkeypatch, tmp_path):
+    c, _ = make(monkeypatch, tmp_path)
+    c.settings.event_mode = "websocket"
+    calls = []
+    c.api.rtms = lambda mid, action, **kwargs: calls.append(action)
+
+    async def run():
+        waiting = asyncio.Event()
+        async def events(endpoint, token, event, status, stop, ready):
+            waiting.set()
+            await stop.wait()
+        monkeypatch.setattr(module, "websocket_events", events)
+        task = asyncio.create_task(c._run())
+        await asyncio.wait_for(waiting.wait(), 1)
+        c.stop()
+        await asyncio.wait_for(task, .5)
+    asyncio.run(run())
+    assert calls == [] and c.pipeline.pending_seconds == 0
+    c.close()
+
+
+def test_event_authorization_failure_is_reported_without_waiting_full_timeout(monkeypatch, tmp_path):
+    c, _ = make(monkeypatch, tmp_path)
+    c.settings.event_mode = "websocket"
+    calls = []
+    c.api.rtms = lambda mid, action, **kwargs: calls.append(action)
+    async def events(*_):
+        raise RuntimeError("private-token-must-not-escape")
+    monkeypatch.setattr(module, "websocket_events", events)
+    with pytest.raises(module.ZoomError) as error:
+        asyncio.run(asyncio.wait_for(c._run(), .5))
+    assert "private-token" not in str(error.value)
+    assert calls == []
+    c.close()
+
+
+def test_event_gap_after_ready_before_paid_start_aborts_without_start(monkeypatch, tmp_path):
+    c, _ = make(monkeypatch, tmp_path)
+    c.settings.event_mode = "websocket"
+    calls = []
+    c.api.rtms = lambda mid, action, **kwargs: calls.append(action)
+    async def events(endpoint, token, event, status, stop, ready):
+        ready.set()
+        status("events_connected", {})
+        ready.clear()
+        status("events_reconnecting", {})
+        await stop.wait()
+    monkeypatch.setattr(module, "websocket_events", events)
+    with pytest.raises(module.ZoomError, match="повторите запуск"):
+        asyncio.run(asyncio.wait_for(c._run(), .5))
+    assert calls == []
+    c.close()
+
+
+def test_event_gap_during_start_waits_for_rest_response_then_sends_stop(monkeypatch, tmp_path):
+    c, _ = make(monkeypatch, tmp_path)
+    c.settings.event_mode = "websocket"
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def rtms(mid, action, **kwargs):
+        calls.append(action)
+        if action == "start":
+            entered.set()
+            assert release.wait(2), "test did not release REST Start"
+            calls.append("start_response")
+    c.api.rtms = rtms
+
+    async def run():
+        gapped = asyncio.Event()
+        async def events(endpoint, token, event, status, stop, ready):
+            ready.set()
+            status("events_connected", {})
+            assert await asyncio.to_thread(entered.wait, 1)
+            ready.clear()
+            status("events_reconnecting", {})
+            gapped.set()
+            await stop.wait()
+        monkeypatch.setattr(module, "websocket_events", events)
+        task = asyncio.create_task(c._run())
+        try:
+            await asyncio.wait_for(gapped.wait(), 1)
+            await asyncio.sleep(.03)
+            assert calls == ["start"]  # Stop must not race an unfinished Start.
+            release.set()
+            with pytest.raises(module.ZoomError, match="повторите запуск"):
+                await asyncio.wait_for(task, 1)
+        finally:
+            release.set()
+            await asyncio.gather(task, return_exceptions=True)
+    asyncio.run(run())
+    assert calls == ["start", "start_response", "stop"]
+    c.close()
+
+
+def test_event_gap_while_waiting_rtms_started_fails_fast_and_stops_paid_stream(monkeypatch, tmp_path):
+    c, _ = make(monkeypatch, tmp_path)
+    c.settings.event_mode = "websocket"
+    entered = threading.Event()
+    calls = []
+    def rtms(mid, action, **kwargs):
+        calls.append(action)
+        if action == "start":
+            entered.set()
+    c.api.rtms = rtms
+    async def events(endpoint, token, event, status, stop, ready):
+        ready.set()
+        status("events_connected", {})
+        assert await asyncio.to_thread(entered.wait, 1)
+        await asyncio.sleep(.02)
+        ready.clear()
+        status("events_reconnecting", {})
+        await stop.wait()
+    monkeypatch.setattr(module, "websocket_events", events)
+    with pytest.raises(module.ZoomError, match="повторите запуск"):
+        asyncio.run(asyncio.wait_for(c._run(), 1))
+    assert calls == ["start", "stop"]
+    c.close()
+
+
+def test_event_gap_after_media_connection_keeps_media_and_journals_warning(monkeypatch, tmp_path):
+    c, events_out = make(monkeypatch, tmp_path)
+    c.settings.event_mode = "websocket"
+    calls = []
+    def rtms(mid, action, **kwargs):
+        calls.append(action)
+        if action == "start":
+            c._lifecycle_event(started())
+    c.api.rtms = rtms
+
+    async def run():
+        gapped = asyncio.Event()
+        async def events(endpoint, token, event, status, stop, ready):
+            ready.set()
+            status("events_connected", {})
+            while not c._media_established:
+                await asyncio.sleep(.001)
+            ready.clear()
+            status("events_reconnecting", {"message": "Lifecycle connection interrupted"})
+            gapped.set()
+            await asyncio.sleep(.03)
+            ready.set()
+            status("events_connected", {})
+            await stop.wait()
+        monkeypatch.setattr(module, "websocket_events", events)
+        task = asyncio.create_task(c._run())
+        await asyncio.wait_for(gapped.wait(), 1)
+        assert not c._cancel.is_set() and not c.stop_event.is_set()
+        assert calls == ["start"]
+        c.stop()
+        await asyncio.wait_for(task, 1)
+    asyncio.run(run())
+    assert calls == ["start", "stop"]
+    assert list(c.store.iter_segments())
+    assert any(g.reason == "event_delivery_gap_unknown_duration" for g in c.store.iter_gaps())
+    assert any(kind == "events_reconnecting" for kind, _ in events_out)
+    c.close()
+
+
 def test_receiver_recreated_when_secret_or_port_changes(monkeypatch, tmp_path):
     created = []
     class Receiver:

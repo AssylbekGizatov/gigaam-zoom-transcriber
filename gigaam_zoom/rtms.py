@@ -142,11 +142,13 @@ class RTMSClient:
         validate_server_url(url, self.allowed_hosts)
         # Disable proxy discovery: media must connect directly to the validated
         # Zoom host. The library validates certificates and hostname normally.
+        # Race the next address family after 250 ms on Windows dual-stack networks.
         return _ZoomConnect(
             url, allowed_hosts=self.allowed_hosts,
             ssl=ssl.create_default_context(), proxy=None,
             open_timeout=10, close_timeout=2, max_size=MAX_MESSAGE_BYTES,
             max_queue=16, ping_interval=20, ping_timeout=20,
+            happy_eyeballs_delay=.25,
         )
 
     async def _send(self, socket, message: dict):

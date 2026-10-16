@@ -1,0 +1,76 @@
+{
+  "checked_on": "2026-10-16",
+  "report_recorded_on": "2026-10-17",
+  "timezone": "Asia/Qyzylorda",
+  "kind": "personal_general_app_development_local_test",
+  "evidence_source": "Observed local OAuth, users/me and Zoom Event WebSocket checks; no RTMS session started",
+  "approved_configuration": {
+    "scopes": [
+      "meeting:read:meeting_audio",
+      "meeting:update:participant_rtms_app_status",
+      "user:read:user",
+      "meeting:read:list_meetings"
+    ],
+    "public_client_oauth_pkce": true,
+    "lifecycle_subscriptions_saved": [
+      "meeting.rtms_started",
+      "meeting.rtms_stopped",
+      "meeting.rtms_interrupted"
+    ],
+    "event_delivery_method": "websocket",
+    "new_external_forwarder_created": false
+  },
+  "verified_live": {
+    "oauth_authorization": true,
+    "pkce_loopback_callback": true,
+    "oauth_token_exchange": true,
+    "profile_users_me": true,
+    "intended_account_matched": true,
+    "credentials_saved_with_windows_dpapi": true,
+    "event_websocket_client_credentials": true,
+    "event_websocket_build_connection_success": true,
+    "event_websocket_connect_seconds_single_observation": 0.97,
+    "meeting_lifecycle_event_received": false,
+    "meeting_audio_received": false,
+    "meeting_transcript_verified": false,
+    "rtms_start_called": false,
+    "billing_authorized": false,
+    "event_websocket_heartbeat_ack_success": true,
+    "gui_event_check_success": true
+  },
+  "network_observations": {
+    "initial_default_websocket_open_timed_out": true,
+    "initial_open_timeout_seconds": 15,
+    "separate_tcp_tls_connection_succeeded": true,
+    "happy_eyeballs_delay_seconds": 0.25,
+    "happy_eyeballs_event_websocket_verified": true,
+    "final_configuration_forces_ipv4_only": false,
+    "final_configuration_disables_compression": false,
+    "tls_certificate_and_hostname_verification_enabled": true,
+    "interpretation": "The observations are consistent with delayed IPv6/IPv4 fallback. The exact network cause was not independently audited."
+  },
+  "local_automated_tests": {
+    "passed": 118,
+    "runtime_seconds": 9.53,
+    "uses_real_zoom_account": false,
+    "uses_paid_rtms": false
+  },
+  "remaining_acceptance": [
+    "Verify Developer Pack entitlement, balance and account-specific billing conditions",
+    "Obtain explicit permission before starting any credit-consuming RTMS session",
+    "Receive an actual meeting lifecycle event and participant audio",
+    "Verify speaker attribution, timing, reconnect, stop and exports in a real meeting"
+  ],
+  "privacy": {
+    "account_email_included": false,
+    "account_or_app_ids_included": false,
+    "subscription_or_endpoint_values_included": false,
+    "credentials_or_tokens_included": false,
+    "recordings_or_meeting_text_included": false
+  },
+  "official_references": [
+    "https://developers.zoom.us/docs/integrations/oauth/",
+    "https://developers.zoom.us/docs/api/websockets/",
+    "https://developers.zoom.us/docs/rtms/meetings/getting-started/"
+  ]
+}

@@ -1,6 +1,7 @@
 """Russian desktop UI; no network, inference or export work on Tk's thread."""
 from __future__ import annotations
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
 import queue
 import threading
@@ -45,6 +46,7 @@ class Application:
         self._build()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(120, self.poll)
+        root.after(200, self.restore_account)
 
     def post(self, kind, payload=None):
         try:
@@ -135,7 +137,8 @@ class Application:
             "Не публикуйте приложение и не включайте организационное развёртывание.", wraplength=900).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 15))
         fields = [("client_id", "Client ID", False), ("public_client_id", "Public Client ID (PKCE)", False),
                   ("client_secret", "Client Secret", True), ("webhook_secret", "Webhook Secret Token", True),
-                  ("model_dir", "Локальная папка модели", False), ("webhook_port", "Локальный порт webhook", False)]
+                  ("model_dir", "Локальная папка модели", False), ("event_endpoint", "WebSocket Endpoint URL", False),
+                  ("webhook_port", "Порт webhook (резервный режим)", False)]
         for row, (key, label, secret) in enumerate(fields, 1):
             ttk.Label(setup, text=label).grid(row=row, column=0, sticky="w", pady=6)
             var = tk.StringVar(value="" if secret else str(getattr(self.settings, key)))
@@ -144,19 +147,24 @@ class Application:
             entry.grid(row=row, column=1, sticky="ew", padx=12)
             if key == "model_dir":
                 ttk.Button(setup, text="Обзор…", command=self.choose_model).grid(row=row, column=2)
+        ttk.Label(setup, text="Доставка событий").grid(row=8, column=0, sticky="w", pady=6)
+        self.variables["event_mode"] = tk.StringVar(value=self.settings.event_mode)
+        ttk.Combobox(setup, textvariable=self.variables["event_mode"], values=("websocket", "webhook"),
+                     state="readonly", width=20).grid(row=8, column=1, sticky="w", padx=12)
         ttk.Label(setup, text="Пустые поля секретов сохраняют ранее записанные значения. Секреты шифруются DPAPI текущего пользователя Windows.",
-                  wraplength=900).grid(row=7, column=0, columnspan=3, sticky="w", pady=10)
+                  wraplength=900).grid(row=9, column=0, columnspan=3, sticky="w", pady=10)
         setup_controls = ttk.Frame(setup)
-        setup_controls.grid(row=8, column=0, columnspan=3, sticky="w")
+        setup_controls.grid(row=10, column=0, columnspan=3, sticky="w")
         ttk.Button(setup_controls, text="Сохранить настройки", command=self.save).pack(side="left")
+        ttk.Button(setup_controls, text="Проверить события Zoom", command=self.check_events).pack(side="left", padx=8)
         ttk.Button(setup_controls, text="Включить приёмник webhook", command=self.receiver).pack(side="left", padx=8)
         ttk.Button(setup_controls, text="Открыть Marketplace", command=lambda: webbrowser.open("https://marketplace.zoom.us/develop/create")).pack(side="left")
-        ttk.Label(setup, text="Получение событий требует HTTPS webhook, направленного на http://127.0.0.1:8765/webhook.\n"
-            "Аудио идёт напрямую Zoom → ваш компьютер по WSS. Через webhook проходят только служебные метаданные.\n"
+        ttk.Label(setup, text="WebSocket: события и аудио поступают напрямую Zoom → ваш компьютер; внешний туннель не нужен.\n"
+            "Webhook — резервный режим с вашим HTTPS endpoint. Автостарт RTMS не включается.\n"
             "OAuth redirect: http://127.0.0.1/callback (Public Client OAuth / PKCE).\n"
-            "Разовые настройки, минимальные scopes и порядок проверки: docs/ZOOM_SETUP.md.", wraplength=900).grid(row=9, column=0, columnspan=3, sticky="w", pady=18)
+            "Разовые настройки, минимальные scopes и порядок проверки: docs/ZOOM_SETUP.md.", wraplength=900).grid(row=11, column=0, columnspan=3, sticky="w", pady=10)
         ttk.Label(setup, text="RTMS показывает приложение в Active Apps / уведомлении об обработке данных Zoom.\n"
-            "Отдельного участника-бота нет. Общий микрофон остаётся одним источником.", wraplength=900).grid(row=10, column=0, columnspan=3, sticky="w")
+            "Отдельного участника-бота нет. Общий микрофон остаётся одним источником.", wraplength=900).grid(row=12, column=0, columnspan=3, sticky="w")
         setup.columnconfigure(1, weight=1)
 
     def background(self, operation):
@@ -180,16 +188,22 @@ class Application:
             messagebox.showinfo("Сеанс активен", "Остановите сеанс перед изменением настроек.")
             return False
         try:
-            for key in ("client_id", "public_client_id", "model_dir"):
-                setattr(self.settings, key, self.variables[key].get().strip())
-            self.settings.webhook_port = int(self.variables["webhook_port"].get())
-            self.settings.export_dir = self.folder.get().strip()
-            self.settings.event_mode = "webhook"
-            self.settings.validate()
+            candidate = replace(self.settings)
+            for key in ("client_id", "public_client_id", "model_dir", "event_endpoint", "event_mode"):
+                setattr(candidate, key, self.variables[key].get().strip())
+            candidate.webhook_port = int(self.variables["webhook_port"].get())
+            candidate.export_dir = self.folder.get().strip()
+            candidate.validate()
+            identity_changed = (candidate.client_id, candidate.public_client_id) != (self.settings.client_id, self.settings.public_client_id)
             updates = {key: self.variables[key].get().strip() for key in ("client_secret", "webhook_secret") if self.variables[key].get().strip()}
+            if identity_changed:
+                updates["tokens"] = {}
             if updates:
                 self.vault.update(**updates)
-            self.settings.save()
+            candidate.save()
+            self.settings = self.controller.settings = self.controller.api.settings = candidate
+            if identity_changed:
+                self.account.set("Приложение Zoom изменено — подключите аккаунт снова")
             for key in ("client_secret", "webhook_secret"):
                 self.variables[key].set("")
             self.status.set("Настройки сохранены локально. Секреты зашифрованы Windows DPAPI.")
@@ -210,6 +224,16 @@ class Application:
             self.post("account", profile)
         self.background(operation)
 
+    def restore_account(self):
+        try:
+            saved = bool(self.vault.load().get("tokens", {}).get("refresh_token"))
+        except Exception:
+            self.status.set("Не удалось прочитать сохранённый вход. Подключите Zoom снова.")
+            return
+        if saved and not self.busy and not self.closing:
+            self.account.set("Проверяю сохранённый вход Zoom…")
+            self.background(lambda: self.post("account", self.controller.api.profile()))
+
     def list_meetings(self):
         def operation():
             items = self.controller.api.meetings()
@@ -219,6 +243,37 @@ class Application:
     def receiver(self):
         if self.save():
             self.background(self.controller.ensure_receiver)
+
+    def check_events(self):
+        if not self.save():
+            return
+        if self.settings.event_mode != "websocket":
+            self.receiver()
+            return
+        self.status.set("Проверяю авторизацию событий Zoom без старта RTMS…")
+        def operation():
+            from .events import websocket_events
+            import asyncio
+            async def check():
+                stop, ready = asyncio.Event(), asyncio.Event()
+                task = asyncio.create_task(websocket_events(self.settings.event_endpoint,
+                    self.controller.api.event_token, lambda *_: None, lambda *_: None, stop, ready))
+                wait_ready = asyncio.create_task(ready.wait())
+                try:
+                    done, _ = await asyncio.wait([task, wait_ready],
+                        timeout=20, return_when=asyncio.FIRST_COMPLETED)
+                    if not ready.is_set():
+                        if task in done:
+                            await task
+                        raise ZoomError("Zoom не подтвердил WebSocket-соединение событий за 20 секунд.")
+                    self.post("events_checked", {"message": "Zoom подтвердил WebSocket событий. RTMS и аудио не запускались."})
+                finally:
+                    stop.set()
+                    task.cancel()
+                    wait_ready.cancel()
+                    await asyncio.gather(task, wait_ready, return_exceptions=True)
+            asyncio.run(check())
+        self.background(operation)
 
     def choose_model(self):
         value = filedialog.askdirectory(title="Папка GigaAM с config.json и pytorch_model.bin")

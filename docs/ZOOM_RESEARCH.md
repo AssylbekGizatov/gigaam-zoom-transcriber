@@ -1,8 +1,11 @@
 # Zoom: выбранный путь и проверенные ограничения
 
-Проверено 16 октября 2026 года по официальным документам Zoom. Наличие кода
-адаптера и прохождение имитационных тестов не подтверждают доступ к конкретному
-Zoom-аккаунту, оплату RTMS или работу на реальной встрече.
+Проверено 16 октября 2026 года по официальным документам Zoom и интерфейсу
+личного General App Development. В нём сохранена WebSocket-подписка на три RTMS
+lifecycle events и включён Public Client OAuth/PKCE. На реальном сервисе также
+проверены OAuth/PKCE, `users/me` нужного аккаунта и авторизация Event WebSocket.
+Настоящий lifecycle event из встречи, аудио и сама встреча ещё не проверены.
+RTMS Start не выполнялся, разрешение на списания не получено.
 
 ## Решение
 
@@ -77,17 +80,17 @@ $0,02 / Session Streaming Minute. Используется только ауди
    браузером. Не передавать пароль приложению или в GitHub.
 2. Создать **General App, user-managed** для личного использования внутри своего
    аккаунта. RTMS scopes/events требуют именно user-managed приложения.
-3. Добавить `meeting:read:meeting_audio`. Для ручного старта/стопа REST добавить
-   `meeting:update:participant_rtms_app_status`. Дополнительные profile/meeting
-   scopes нужны только соответствующим функциям интерфейса.
-4. Настроить события `meeting.rtms_started`, `meeting.rtms_stopped`; для
-   восстановления также `meeting.rtms_interrupted`, если оно доступно в UI.
-   Документированный RTMS путь — публичный HTTPS webhook endpoint, его URL
-   validation и подпись запросов. Указывайте endpoint этого компьютера через
-   выбранный владельцем безопасный туннель. Туннель переносит webhook-метаданные;
-   RTMS audio принимается отдельными исходящими WSS-соединениями.
-5. Настроить точный OAuth redirect URI и разрешённые URL; подключить приложение
-   через Local Test. Сохранить Client ID/Secret и Secret Token только локально.
+3. Настроить только четыре согласованных scopes: `meeting:read:meeting_audio`,
+   `meeting:update:participant_rtms_app_status`, `user:read:user`,
+   `meeting:read:list_meetings`. Admin, transcript, video и chat scopes не нужны.
+4. В Access → Event subscriptions выбрать **WebSocket** и события
+   `meeting.rtms_started`, `meeting.rtms_stopped`, `meeting.rtms_interrupted`.
+   В текущем General App все три уже сохранены. Выданный Endpoint URL хранится
+   локально; публичный HTTPS endpoint и внешний туннель для этого пути не нужны.
+5. Настроить Public Client OAuth/PKCE и redirect `http://127.0.0.1/callback`;
+   подключить приложение через Local Test. Сохранить Client ID, Public Client ID,
+   Client Secret и Endpoint URL только локально. Проверка «Проверить события Zoom»
+   авторизует Event WSS без REST Start и аудио.
 6. По отдельному согласию владельца разрешить Zoom Apps → Share realtime meeting
    content with apps. Разрешение приложения и аккаунтные переключатели являются
    постоянными разрешениями; автоматизация не включает их без подтверждения.
@@ -105,7 +108,7 @@ REST Start использует `PATCH /v2/live_meetings/{meetingId}/rtms_app/st
 получил общую ссылку. Права хоста и политики встречи также действуют.
 [Официальный REST quickstart](https://developers.zoom.us/docs/rtms/meetings/quickstart-rest-api/).
 
-## Исходящие события WebSocket: условный дополнительный путь
+## Исходящие события WebSocket: предпочтительный локальный путь
 
 Общий Zoom Event WebSocket API поддерживает General apps и Server-to-Server
 apps: `client_credentials` token, URL из Marketplace с `subscriptionId`, heartbeat
@@ -113,14 +116,31 @@ apps: `client_credentials` token, URL из Marketplace с `subscriptionId`, hear
 своего аккаунта. События за период разрыва не переотправляются.
 [Официальная спецификация](https://developers.zoom.us/docs/api/websockets/).
 
-Однако RTMS setup отдельно требует user-managed General App и документирует
-webhook. В доступной документации не найдено однозначного обещания, что RTMS
-lifecycle events можно выбрать в Event WebSocket именно такого приложения.
-Используйте этот путь только если Marketplace реально предлагает RTMS events
-для WebSocket-подписки и проверена доставка `meeting.rtms_started`. До этой
-проверки нельзя обещать отсутствие HTTPS endpoint/туннеля. S2S приложение само
-по себе не заменяет RTMS General App. Событийный WebSocket и два RTMS WebSocket —
-разные протоколы с разной авторизацией и heartbeat.
+В текущем user-managed General App интерфейс Marketplace действительно предложил
+метод WebSocket и позволил сохранить RTMS Started / Stopped / Interrupted.
+Поэтому неопределённость доступности этого метода для личной настройки снята.
+Внешний HTTPS forwarder для выбранной конфигурации не нужен. До реальной
+встречи отдельно остаётся проверить доставку `meeting.rtms_started` и медиа;
+успешный `build_connection`, полученный от Zoom, подтверждает только авторизацию
+канала событий. Реальный OAuth/PKCE и проверка профиля также завершились успешно.
+
+Первый Event WSS с обычным выбором адресов завершился таймаутом 15 с, хотя
+отдельный TCP/TLS работал. С `happy_eyeballs_delay=0.25` получен успешный
+`build_connection` примерно за 0,97 с при обычном сжатии и проверке TLS.
+Эта настройка добавлена для Event WSS и RTMS signaling/audio. Наблюдение
+согласуется с задержкой IPv6/IPv4 fallback; точная причина сети отдельно не
+аудирована. [Обезличенные результаты](evidence/zoom-local-test.json).
+
+Приложение ожидает успешный `build_connection`, отправляет heartbeat независимо
+от поступления событий и обновляет токен. Кнопка проверки событий не вызывает
+оплачиваемый Start. OAuth пользователя с PKCE нужен отдельно для разрешённых
+REST-операций. S2S приложение не заменяет user-managed RTMS General App.
+Событийный WSS и два RTMS WSS — разные соединения и протоколы.
+
+Официальные RTMS quickstarts также описывают подписанный HTTPS webhook. Этот
+вариант сохранён как **резерв** и требует отдельно выбранного forwarder,
+валидации URL и проверки подписи. Forwarder переносит только lifecycle metadata;
+аудио всё равно идёт от Zoom прямо на ПК. Он не включается автоматически.
 
 ## Аудио и атрибуция
 
@@ -175,10 +195,11 @@ failover с новыми URL. Число попыток ограничено; р
 приложения требуют соответствующих действий владельца.
 [App Review RTMS](https://developers.zoom.us/docs/rtms/meetings/submit-app-review/).
 
-Реальная встреча остаётся непроверенной, пока не подтверждены тариф, доступ к
-Marketplace, scopes, OAuth, доставка lifecycle events, разрешение хоста и
-реальные аудиопакеты. Синтетический сервер проверяет протокол и сбои; он не
-подменяет эту приёмку.
+В текущем приложении сохранены настройки Marketplace, согласованы четыре scopes
+и включён PKCE. Реальная встреча остаётся непроверенной: необходимы проверка
+Developer Pack/баланса/договора, отдельное разрешение на списания,
+разрешение хоста, настоящие lifecycle events и аудиопакеты.
+Синтетический сервер проверяет протокол и сбои; он не подменяет эту приёмку.
 
 ## Проверка транспорта в этой поставке
 
@@ -195,3 +216,9 @@ keepalive, PCM и подтверждённый Stop. Это имитация п�
 локальными сокетами, **не реальная Zoom-встреча**. В CI эта проверка пропускается
 только если недоступны openssl или loopback-порт443; остальные проверки от них
 не зависят. Тестовый private key не хранится в репозитории.
+
+`tests/test_event_websocket.py`: **14 проверок прошли локально**, включая
+подтверждение `build_connection`, heartbeat при непрерывных событиях, обновление
+токена, остановку, ограниченные повторы, обработку JSON-обёрток и фильтр redirect.
+Отдельный тест использует настоящий loopback TLS/WebSocket со временным доверенным
+сертификатом. Эти проверки не обращаются к Zoom и не подтверждают live-доставку.

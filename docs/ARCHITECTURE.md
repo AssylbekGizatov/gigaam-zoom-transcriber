@@ -6,7 +6,8 @@
 последние 500 реплик. `controller.py` — отдельный поток/asyncio loop жизненного
 цикла. `auth.py` — PKCE S256 + state, временный loopback callback, ротация refresh
 tokens. `config.py` — публичные настройки отдельно от user-bound Windows DPAPI.
-`events.py` — проверяемый HMAC webhook и ограниченный dedup. `rtms.py` — официальные
+`events.py` — основной исходящий Event WebSocket и резервный HMAC webhook с
+ограниченным dedup. `rtms.py` — официальные
 signaling/media WebSocket сообщения. `pipeline.py` — один inference worker,
 per-source окна и глобальный бюджет 48 секунд аудио. `engine.py` — закреплённая
 GigaAM CPU float32. `store.py` — SQLite WAL. `exports.py` — локальные документы.
@@ -17,10 +18,11 @@ flowchart LR
   B[Официальный браузер OAuth] --> O[Zoom OAuth]
   O --> L[Временный callback 127.0.0.1]
   L --> D[DPAPI на Windows]
-  Z --> W[Подписанный webhook: только метаданные]
-  W --> H[HTTPS forwarder пользователя]
-  H --> V[HMAC receiver 127.0.0.1:8765]
-  V --> C[Controller]
+  Z --> W[Zoom Event WebSocket: метаданные]
+  W --> C[Controller на ПК]
+  Z -. резервный подписанный webhook .-> H[HTTPS forwarder пользователя]
+  H -.-> V[HMAC receiver 127.0.0.1:8765]
+  V -.-> C
   C --> S[Zoom signaling WSS]
   S --> A[Zoom audio WSS: PCM + ID + timestamp]
   A --> Q[Ограниченные per-source буферы / очередь]
@@ -33,10 +35,30 @@ flowchart LR
 ## Локальность
 
 Аудио проходит обычную инфраструктуру Zoom и приходит напрямую локальному
-приложению. Туннель webhook видит служебные идентификаторы и адреса RTMS, не PCM
-и не транскрипт. Модель, inference, SQLite и экспорт на ПК. Модуль модели загружает
+приложению. В основном режиме и lifecycle events, и аудио идут через исходящие
+WSS-соединения с Zoom: публичный локальный порт и сторонний туннель не нужны.
+При отдельно включённом резервном webhook forwarder видит служебные идентификаторы
+и адреса RTMS, не PCM и не транскрипт. Модель, inference, SQLite и экспорт на ПК. Модуль модели загружает
 файлы с диска, проверяет SHA256 и `weights_only=True`, не вызывает model-hub loader.
 Нет OpenAI/Whisper/внешнего STT/LLM клиента. Скрипт acquisition выполняется отдельно.
+
+## Каналы Zoom и авторизация
+
+OAuth пользователя использует Public Client PKCE S256 и loopback
+`http://127.0.0.1:<временный порт>/callback`. Согласованы четыре scopes:
+`meeting:read:meeting_audio`, `meeting:update:participant_rtms_app_status`,
+`user:read:user`, `meeting:read:list_meetings`.
+
+Event WebSocket — отдельный account-bound канал с `client_credentials` token.
+Он считается готовым только после успешного `build_connection`; heartbeat
+отправляется каждые 30 секунд независимо от входящего трафика. Токен обновляется
+до истечения часа, число последовательных ошибок ограничено. Zoom не повторяет
+события, пропущенные во время разрыва. [Официальный Event WebSocket API](https://developers.zoom.us/docs/api/websockets/).
+
+В личном General App Development сохранены три RTMS lifecycle events с методом
+WebSocket. Кнопка «Проверить события Zoom» проверяет только авторизацию этого
+канала, без модели, REST Start и приёма аудио. Настройка подписки и проверка канала
+не равны проверке реальной RTMS-встречи и не дают разрешения на списания.
 
 ## Источник и часы
 
@@ -75,8 +97,10 @@ TXT/MD/JSON потоковые; DOCX и PDF могут использовать 
 
 ## Завершение и ошибки
 
-Start требует непостоянных галочек consent и billing. Сначала загружается модель,
-потом явный REST Start и ожидание подписанного события. По ошибке/Stop отправляются
+Start требует непостоянных галочек consent и billing. Сначала загружается модель
+и подтверждается канал событий, потом выполняется явный REST Start и ожидается
+`meeting.rtms_started`. В резервном webhook подпись проверяется отдельно.
+По ошибке/Stop отправляются
 STREAM_CLOSE и REST Stop. Если ответ потерян, UI требует проверить Active Apps;
 нет обещания, что обрыв сети прекратил списания. После остановки аудиоприёма worker
 дорабатывает принятую очередь. Закрытие окна ждёт фоновые потоки. SQLite остаётся
