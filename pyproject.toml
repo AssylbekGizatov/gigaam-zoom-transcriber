@@ -1,0 +1,10 @@
+[project]
+name = "gigaam-zoom-transcriber"
+version = "0.1.0"
+description = "Local Windows GigaAM transcription of Zoom RTMS participant audio"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
