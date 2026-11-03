@@ -353,7 +353,9 @@ class Application:
         if records:
             self.table.see(records[-1].id)
         basis = self.controller.store.get_metadata("time_basis", "first_audio")
-        self.table.heading("time", text="Время от начала встречи" if basis == "meeting" else "Время от начала RTMS" if basis == "rtms_session" else "Время от первого аудио")
+        self.table.heading("time", text={"meeting": "Время от начала встречи",
+            "rtms_session": "Время от начала RTMS", "track": "Время в дорожке"}.get(basis, "Время от первого аудио"))
+        self.table.heading("person", text="Имя из файла · дорожка" if basis == "track" else "Имя · Zoom ID / источник")
 
     def poll(self):
         refresh = False

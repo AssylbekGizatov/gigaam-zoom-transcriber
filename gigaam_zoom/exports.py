@@ -102,6 +102,9 @@ def _events(store: Any) -> Iterable[dict]:
 
 
 def _timing_note(metadata: dict) -> str:
+    if metadata.get("time_basis") == "track":
+        return ("Время от начала каждой дорожки. Общая шкала встречи не установлена. "
+                "Имена взяты из названий файлов Zoom, ID обозначают дорожки, а не участников Zoom.")
     if metadata.get("time_basis") == "meeting":
         origin = "Время отсчитывается от подтверждённого начала встречи Zoom. "
     elif metadata.get("time_basis") == "first_audio":
@@ -136,7 +139,8 @@ def _text(store: Any, stream: Any, markdown: bool, metadata: dict) -> None:
 
 def _json(store: Any, stream: Any, metadata: dict) -> None:
     stream.write('{"schema_version":1,"timing":')
-    json.dump({"meeting": "meeting_seconds", "first_audio": "first_audio_seconds"}.get(
+    json.dump({"meeting": "meeting_seconds", "first_audio": "first_audio_seconds",
+               "track": "track_seconds"}.get(
         metadata.get("time_basis"), "rtms_session_seconds"), stream)
     stream.write(',"note":')
     json.dump(_timing_note(metadata), stream, ensure_ascii=False)
