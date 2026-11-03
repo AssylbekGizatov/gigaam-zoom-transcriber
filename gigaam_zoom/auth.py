@@ -44,7 +44,27 @@ def request_json(url, *, method="GET", data=None, headers=None):
                     403: "Zoom запретил действие. Проверьте scopes, разрешение хоста и Developer Pack.",
                     404: "Встреча или приложение Zoom не найдены.",
                     429: "Лимит запросов Zoom. Повторите действие позже."}
-        raise ZoomError(messages.get(error.code, f"Ошибка Zoom HTTP {error.code}.")) from None
+        message = messages.get(error.code, f"Ошибка Zoom HTTP {error.code}.")
+        if (parsed.hostname == "api.zoom.us" and method == "PATCH"
+                and parsed.path.startswith("/v2/live_meetings/")
+                and parsed.path.endswith("/rtms_app/status")):
+            hints = {
+                2310: "Zoom не выполнил операцию RTMS. Проверьте доступность RTMS для аккаунта и приложения; этот код сам по себе не подтверждает отсутствие кредитов.",
+                2308: "Для запуска требуется хост или альтернативный хост встречи.",
+                3000: "Встреча ещё не началась.",
+                13262: "Приложению не разрешён доступ к содержимому встречи.",
+                13267: "Передача содержимого встречи приложениям отключена.",
+                13273: "Эта встреча не поддерживает RTMS.",
+                13277: "RTMS для этого пользователя не был запущен.",
+            }
+            try:
+                response = json.loads(error.read(8192))
+                code = response.get("code") if isinstance(response, dict) else None
+            except (ValueError, OSError, RecursionError):
+                code = None
+            if type(code) is int and code in hints:
+                message = f"Zoom RTMS {code}: {hints[code]}"
+        raise ZoomError(message) from None
     except (URLError, TimeoutError, OSError):
         raise ZoomError("Нет защищённого соединения с Zoom. Проверьте сеть и прокси.") from None
     except (ValueError, UnicodeError):

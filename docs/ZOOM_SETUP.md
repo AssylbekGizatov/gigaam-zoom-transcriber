@@ -120,6 +120,28 @@ content with apps, внешний HTTPS forwarder, новые соглашени
 
 ## Понятные ошибки
 
+**Проверка 4 ноября 2026:** `0 credits` сам по себе не определяет доступность
+RTMS. Zoom требует [Developer Pack для RTMS](https://developers.zoom.us/docs/rtms/meetings/getting-started/)
+и предлагает [Pay as you go с постоплатой](https://devforum.zoom.us/t/rtms-self-service-purchasing-is-now-available/144524).
+Уточните название продукта и действующий тариф у администратора: права Developer,
+платный Zoom Workplace и Developer Pack — разные вещи. В проверенном Billing
+виден платный план, но его детали для текущей роли закрыты.
+
+Код теперь показывает известные числовые [отказы RTMS API](https://developers.zoom.us/docs/api/meetings/)
+без текста ответа Zoom и идентификатора встречи. В частности, `13267` указывает
+на отключённую передачу содержимого приложениям, `13262` — на отсутствие
+разрешения приложения, а `2310` — общий отказ, не доказательство нулевого баланса.
+Кнопка проверки событий по-прежнему не запускает RTMS и не проверяет entitlement.
+
+Для автоматического запуска при входе пользователя Zoom поддерживает
+[RTMS auto-start](https://developers.zoom.us/docs/rtms/meetings/ux-host-admin-tools-ctrls/).
+Он не присоединяет отдельного бота и не запускает Windows-исполнитель сам.
+Оставляйте его выключенным до проверки ручного запуска и отдельного решения о
+правилах расхода. Видимый участник на Meeting SDK — другой путь:
+[OBF и правила подключения](https://developers.zoom.us/docs/meeting-sdk/obf-faq/)
+и [право на raw audio](https://developers.zoom.us/docs/meeting-sdk/windows/default-ui/advanced-features/raw-data/).
+Он не проверен на этом аккаунте и не подтверждён как бесплатная замена.
+
 | Симптом | Проверить |
 | --- | --- |
 | Нет модели / SHA256 | Папка weights + config нужной ревизии; не менять проверки |
