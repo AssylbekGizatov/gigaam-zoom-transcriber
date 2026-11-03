@@ -1,0 +1,4 @@
+-r requirements-asr.txt
+-r requirements-diarization.txt
+PyAudioWPatch==0.2.12.8; sys_platform == 'win32'
+comtypes==1.4.13; sys_platform == 'win32'

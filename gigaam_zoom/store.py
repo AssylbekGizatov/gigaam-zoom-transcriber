@@ -56,7 +56,11 @@ class Store:
                 user_id TEXT NOT NULL, source_epoch TEXT NOT NULL, end REAL NOT NULL,
                 PRIMARY KEY(user_id,source_epoch));
         """)
-        self.set_metadata("schema_version", 1)
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(segments)")}
+        if "attribution" not in columns:
+            self._db.execute("ALTER TABLE segments ADD COLUMN attribution TEXT NOT NULL DEFAULT 'zoom_source_id'")
+            self._db.commit()
+        self.set_metadata("schema_version", 2)
 
     def set_metadata(self, key: str, value) -> None:
         # Only structural metadata is permitted; secrets belong in OS keyring.
@@ -92,13 +96,31 @@ class Store:
                     raise ValueError("Финальную реплику нельзя перезаписать.")
                 if (previous.speaker_id, previous.source_epoch, previous.start) != (segment.speaker_id, segment.source_epoch, segment.start):
                     raise ValueError("Источник и начало реплики неизменяемы.")
-            self._db.execute("""INSERT INTO segments VALUES (?,?,?,?,?,?,?,?)
+            self._db.execute("""INSERT INTO segments VALUES (?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,
-                end=excluded.end,text=excluded.text,status=excluded.status""",
+                end=excluded.end,text=excluded.text,status=excluded.status,attribution=excluded.attribution""",
                 (segment.id, segment.speaker_id, segment.display_name, segment.start,
-                 segment.end, segment.text, segment.status, segment.source_epoch))
+                 segment.end, segment.text, segment.status, segment.source_epoch, segment.attribution))
 
     append = upsert
+
+    def correct_speaker(self, segment_id: str, name: str, *, whole_source=False) -> None:
+        """Explicit user correction; preserve text and timestamp, retain audit event."""
+        name = name.strip()
+        if not name or len(name) > 150 or any(ord(c) < 32 for c in name):
+            raise ValueError("Введите имя длиной от 1 до 150 символов.")
+        with self._lock, self._db:
+            row = self._db.execute("SELECT speaker_id,display_name,source_epoch FROM segments WHERE id=?", (segment_id,)).fetchone()
+            if not row:
+                raise ValueError("Реплика не найдена.")
+            if whole_source:
+                if not row[0].startswith("local:voice:"):
+                    raise ValueError("Подписать весь голос можно только для источника «по голосу». Смешанный звук может содержать разных людей.")
+                self._db.execute("UPDATE segments SET display_name=?,attribution='manual' WHERE speaker_id=? AND source_epoch=?", (name, row[0], row[2]))
+            else:
+                self._db.execute("UPDATE segments SET display_name=?,attribution='manual' WHERE id=?", (name, segment_id))
+            self._db.execute("INSERT INTO participant_events(user_id,display_name,event,source_epoch) VALUES (?,?,?,?)",
+                             (row[0], name, ("manual_source_correction:" if whole_source else "manual_correction:") + segment_id, row[2]))
 
     @staticmethod
     def _segment(row) -> Segment:

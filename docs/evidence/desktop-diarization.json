@@ -1,0 +1,475 @@
+{
+  "created_at_utc": "2026-11-03T20:29:43.653246+00:00",
+  "scope": "Real CPU ONNX embeddings; synthetic chronological concatenation of public speech",
+  "live_zoom_meeting_tested": false,
+  "independent_heldout_test": false,
+  "calibration_data": true,
+  "audio_files_written": 0,
+  "model": {
+    "name": "WeSpeaker VoxCeleb ResNet34-LM (Sherpa ONNX)",
+    "bytes": 26530550,
+    "sha256": "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
+    "license": "CC-BY-4.0",
+    "model_card": "https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/tree/f0c48c298fd835726c27956a5d617bad7115627e",
+    "attribution": "WeSpeaker team; Wang et al., ICASSP 2023"
+  },
+  "versions": {
+    "sherpa-onnx": "2.0.1",
+    "sherpa-onnx-core": "2.0.1",
+    "numpy": "2.2.6",
+    "psutil": "7.0.0"
+  },
+  "machine": {
+    "os": "Windows",
+    "release": "11",
+    "logical_cpus": 8,
+    "physical_memory_mib": 8029.0078125
+  },
+  "settings": {
+    "window_seconds": 3.0,
+    "hop_seconds": 1,
+    "match_threshold": 0.73,
+    "new_threshold": 0.68,
+    "margin": 0.06,
+    "half_similarity": 0.6,
+    "max_speakers": 16,
+    "cpu_threads": 1
+  },
+  "load": {
+    "wall_seconds": 0.6564949000021443,
+    "cpu_seconds": 0.640625,
+    "cpu_percent_one_core": 97.58263163931777,
+    "cpu_percent_machine": 12.197828954914721,
+    "baseline_rss_mib": 40.08203125,
+    "sampled_peak_rss_mib": 117.984375,
+    "sampled_rss_delta_mib": 77.90234375,
+    "rss_sample_interval_seconds": 0.02
+  },
+  "inference": {
+    "wall_seconds": 8.091291899967473,
+    "cpu_seconds": 8.0625,
+    "cpu_percent_one_core": 99.64416189252067,
+    "cpu_percent_machine": 12.455520236565084,
+    "baseline_rss_mib": 88.6328125,
+    "sampled_peak_rss_mib": 111.140625,
+    "sampled_rss_delta_mib": 22.5078125,
+    "rss_sample_interval_seconds": 0.02,
+    "audio_seconds": 48.305,
+    "real_time_factor": 0.1675042314453467,
+    "asr_window_processing_p50_seconds": 1.0166679000249133,
+    "asr_window_processing_max_seconds": 1.8099889000295661
+  },
+  "cluster_count": 3,
+  "clip_results": [
+    {
+      "language": "kk",
+      "repeat": false,
+      "start": 0.0,
+      "end": 11.58,
+      "dominant_local_cluster": "local:voice:001",
+      "seconds_by_cluster_including_silence": {
+        "unknown": 5.58,
+        "local:voice:001": 6.0
+      }
+    },
+    {
+      "language": "ru",
+      "repeat": false,
+      "start": 13.58,
+      "end": 24.87,
+      "dominant_local_cluster": "local:voice:002",
+      "seconds_by_cluster_including_silence": {
+        "unknown": 2.290000000000001,
+        "local:voice:002": 9.0
+      }
+    },
+    {
+      "language": "en",
+      "repeat": false,
+      "start": 26.87,
+      "end": 32.725,
+      "dominant_local_cluster": "local:voice:003",
+      "seconds_by_cluster_including_silence": {
+        "unknown": 1.8550000000000004,
+        "local:voice:003": 4.0
+      }
+    },
+    {
+      "language": "kk",
+      "repeat": true,
+      "start": 34.725,
+      "end": 46.305,
+      "dominant_local_cluster": "local:voice:001",
+      "seconds_by_cluster_including_silence": {
+        "unknown": 4.579999999999998,
+        "local:voice:001": 7.0
+      }
+    }
+  ],
+  "three_distinct_dominant_clusters": true,
+  "identical_clip_repeat_reuses_cluster": true,
+  "spans": [
+    {
+      "start": 0.0,
+      "end": 1.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 1.0,
+      "end": 2.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 2.0,
+      "end": 3.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.7206946611404419,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 3.0,
+      "end": 4.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.9496841430664062,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 4.0,
+      "end": 5.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8665661811828613,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 5.0,
+      "end": 6.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8186059594154358,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 6.0,
+      "end": 7.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8770391941070557,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 7.0,
+      "end": 8.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8650804758071899,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 8.0,
+      "end": 9.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 9.0,
+      "end": 10.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 10.0,
+      "end": 11.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 11.0,
+      "end": 12.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 12.0,
+      "end": 13.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 13.0,
+      "end": 14.0,
+      "local_speaker_id": null,
+      "confidence": 0.556877076625824,
+      "reason": "unstable_or_mixed_voice"
+    },
+    {
+      "start": 14.0,
+      "end": 15.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.6788362860679626,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 15.0,
+      "end": 16.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.889761745929718,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 16.0,
+      "end": 17.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.9293622970581055,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 17.0,
+      "end": 18.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.767601728439331,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 18.0,
+      "end": 19.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.8404949903488159,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 19.0,
+      "end": 20.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.8606433868408203,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 20.0,
+      "end": 21.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.7772250175476074,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 21.0,
+      "end": 22.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.817804217338562,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 22.0,
+      "end": 23.0,
+      "local_speaker_id": "local:voice:002",
+      "confidence": 0.7799617052078247,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 23.0,
+      "end": 24.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 24.0,
+      "end": 25.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 25.0,
+      "end": 26.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 26.0,
+      "end": 27.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 27.0,
+      "end": 28.0,
+      "local_speaker_id": "local:voice:003",
+      "confidence": 0.6393427848815918,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 28.0,
+      "end": 29.0,
+      "local_speaker_id": "local:voice:003",
+      "confidence": 0.9565829634666443,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 29.0,
+      "end": 30.0,
+      "local_speaker_id": "local:voice:003",
+      "confidence": 0.865745484828949,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 30.0,
+      "end": 31.0,
+      "local_speaker_id": "local:voice:003",
+      "confidence": 0.9156337380409241,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 31.0,
+      "end": 32.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 32.0,
+      "end": 33.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 33.0,
+      "end": 34.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 34.0,
+      "end": 35.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 35.0,
+      "end": 36.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 36.0,
+      "end": 37.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8026756048202515,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 37.0,
+      "end": 38.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.926283061504364,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 38.0,
+      "end": 39.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.9463754892349243,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 39.0,
+      "end": 40.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8964462280273438,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 40.0,
+      "end": 41.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8946604132652283,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 41.0,
+      "end": 42.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.9032922983169556,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 42.0,
+      "end": 43.0,
+      "local_speaker_id": "local:voice:001",
+      "confidence": 0.8337558507919312,
+      "reason": "voice_cluster_estimate"
+    },
+    {
+      "start": 43.0,
+      "end": 44.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 44.0,
+      "end": 45.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 45.0,
+      "end": 46.0,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "quiet_or_clipped"
+    },
+    {
+      "start": 46.0,
+      "end": 48.305,
+      "local_speaker_id": null,
+      "confidence": 0.0,
+      "reason": "short_window"
+    }
+  ],
+  "public_sources": [
+    {
+      "language": "kk",
+      "source_url": "https://storage.googleapis.com/xtreme_translations/FLEURS102/kk_kz.tar.gz",
+      "license": "CC BY 4.0",
+      "attribution": "FLEURS (Conneau et al., 2022), Google, https://arxiv.org/abs/2205.12446",
+      "sha256": "b2ac9e019a37da61c3a072100a30bf1f4b89c956656dd6ef430871b17c27c140"
+    },
+    {
+      "language": "ru",
+      "source_url": "https://cdn.chatwm.opensmodel.sberdevices.ru/GigaAM/example.wav",
+      "license": "Official public GigaAM example in MIT repository; public-domain Pushkin reference",
+      "attribution": "salute-developers GigaAM official public example; text by Alexander Pushkin",
+      "sha256": "d8aaaa18a5098d7c6de0595ae7ac1e64cacd0d4022af3595213bdaf23be77e69"
+    },
+    {
+      "language": "en",
+      "source_url": "https://huggingface.co/datasets/hf-internal-testing/librispeech_asr_dummy/tree/5be91486e11a2d616f4ec5db8d3fd248585ac07a",
+      "license": "CC BY 4.0",
+      "attribution": "LibriSpeech ASR corpus (Vassil Panayotov, Guoguo Chen, Daniel Povey, Sanjeev Khudanpur, ICASSP 2015), CC BY 4.0, https://www.openslr.org/12/ . One unchanged recording from the Hugging Face Internal Testing LibriSpeech dummy subset; dataset loader links the original OpenSLR corpus.",
+      "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46"
+    }
+  ],
+  "limits": [
+    "Thresholds were adjusted on these three public clips; this is calibration, not independent accuracy validation",
+    "Two-second windows initially merged KK/RU or fragmented RU; final three-second configuration is reported",
+    "Identical replay tests cluster persistence, not general same-person recognition on unseen speech",
+    "Silence is included in clip duration; unknown duration is not a diarization error rate",
+    "No Zoom ID or real participant name is inferred; labels are local voice clusters",
+    "Simultaneous speakers, natural code switching, noisy meetings and headset/device changes are not validated",
+    "No trained overlap detector; a mixed voice can be assigned incorrectly",
+    "One background-loaded PC run; sampled RSS is not a guaranteed maximum"
+  ]
+}

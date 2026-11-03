@@ -1,7 +1,7 @@
 [project]
 name = "gigaam-zoom-transcriber"
-version = "0.1.0"
-description = "Local Windows GigaAM transcription of Zoom RTMS participant audio"
+version = "0.2.0"
+description = "Live local Windows meeting transcription with GigaAM and WASAPI, no RTMS required"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
 

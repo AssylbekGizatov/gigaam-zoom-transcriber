@@ -123,12 +123,14 @@ def _overlap_alignment(previous, current, overlap_start):
 
 class Pipeline:
     def __init__(self, store: Store, transcriber, on_event=None, origin_ms: int | None = None,
-                 *, max_pending_seconds: float = 48.0, idle_timeout_seconds: float = 1.2):
+                 *, max_pending_seconds: float = 48.0, idle_timeout_seconds: float = 1.2, segmenter=None, window_analyzer=None):
         if not math.isfinite(max_pending_seconds) or not 18 <= max_pending_seconds <= 48:
             raise ValueError("Лимит звука должен быть от 18 до 48 секунд.")
         if not .05 <= idle_timeout_seconds <= 30:
             raise ValueError("Некорректный таймаут тишины.")
         self.store, self.transcriber = store, transcriber
+        self.segmenter = segmenter
+        self.window_analyzer = window_analyzer
         self.on_event = on_event or (lambda kind, payload: None)
         self.origin_ms = origin_ms if origin_ms is not None else store.get_metadata("origin_ms")
         if self.origin_ms is not None:
@@ -427,6 +429,12 @@ class Pipeline:
                 self._inflight_seconds = window.duration
             started = perf_counter()
             try:
+                if self.window_analyzer:
+                    try:
+                        self.window_analyzer(window.key[1], window.pcm, window.rate, window.start)
+                    except Exception:
+                        self.window_analyzer = None
+                        self._emit("attribution_failed", {"message": "Разделение голосов недоступно; текст продолжает распознаваться без голосовых подписей."})
                 words = self.transcriber.transcribe_words(window.pcm, window.rate)
                 self._publish(window, words)
             except (sqlite3.Error, OSError):
@@ -484,9 +492,12 @@ class Pipeline:
             segment = Segment(uuid4().hex, window.key[1], window.name,
                               selected[0].start, max(w.end for w in selected),
                               " ".join(w.text for w in selected), "final", window.key[0])
-            self.store.upsert(segment)
-            with self._condition:
-                self._stats["segments"] += 1
-            self._emit("segment", segment)
+            segments = (self.segmenter(window.key[1], window.key[0], window.name, selected, self.origin_ms)
+                        if self.segmenter else [segment])
+            for segment in segments:
+                self.store.upsert(segment)
+                with self._condition:
+                    self._stats["segments"] += 1
+                self._emit("segment", segment)
         recent.clear()
         recent.extend(context)

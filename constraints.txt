@@ -1,5 +1,6 @@
 antlr4-python3-runtime==4.9.3
 cffi==2.1.1
+comtypes==1.4.13
 charset-normalizer==3.5.2
 colorama==0.4.6
 coloredlogs==15.0.1
@@ -28,6 +29,7 @@ psutil==7.0.0
 pycparser==3.11
 Pygments==2.21.0
 pypdf==6.1.1
+PyAudioWPatch==0.2.12.8
 pyreadline3==3.5.6
 pytest==8.4.2
 python-docx==1.2.0
@@ -35,6 +37,8 @@ PyYAML==6.0.3
 reportlab==4.4.9
 sentencepiece==0.2.2
 setuptools==78.1.0
+sherpa-onnx==2.0.1
+sherpa-onnx-core==2.0.1
 soundfile==0.14.0
 sympy==1.14.0
 torch==2.10.0+cpu

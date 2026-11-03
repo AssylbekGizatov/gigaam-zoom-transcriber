@@ -14,6 +14,11 @@ read-only. Его история, версии и настройки не мен
 | Python / Tcl/Tk | PSF / Tcl-Tk, поставляются с вашим Python |
 | PyTorch / torchaudio CPU | BSD-style, upstream licenses в установленных distributions |
 | NumPy | BSD-3-Clause; собственные bundled BLAS notices |
+| PyAudioWPatch / PortAudio | MIT / PortAudio MIT-style, [исходник](https://github.com/s0d3s/PyAudioWPatch) |
+| comtypes | MIT, [исходник](https://github.com/enthought/comtypes) |
+| sherpa-onnx / sherpa-onnx-core | Apache-2.0, [исходник](https://github.com/k2-fsa/sherpa-onnx); bundled dependency notices |
+| CAM++ advanced Chinese-English speaker model | Apache-2.0 по [карточке ModelScope](https://modelscope.cn/models/iic/speech_campplus_sv_zh_en_16k-common_advanced) и её [API metadata](https://modelscope.cn/api/v1/models/iic/speech_campplus_sv_zh_en_16k-common_advanced). 3D-Speaker / Tongyi Lab; Hui Wang et al., CAM++, arXiv:2303.00332; ONNX conversion sherpa-onnx. Веса здесь не изменялись. |
+| WeSpeaker VoxCeleb ResNet34-LM weights | CC BY 4.0, WeSpeaker team, Wang et al., ICASSP 2023, [закреплённая карточка](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/tree/f0c48c298fd835726c27956a5d617bad7115627e). ONNX conversion sherpa-onnx, здесь веса не изменены. |
 | SentencePiece | Apache-2.0 |
 | Hydra / OmegaConf | MIT / BSD-3-Clause |
 | websockets | BSD-3-Clause |

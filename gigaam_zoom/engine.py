@@ -35,11 +35,11 @@ def verify_model(directory):
     for name, expected in MODEL_FILES.items():
         path = Path(directory) / name
         if not path.is_file():
-            raise EngineError("Модель не найдена. Распакуйте весь ZIP, включая папку models.")
+            raise EngineError("Модель не найдена. Выберите папку с весами или выполните scripts/acquire_model.py из окружения проекта.")
         with path.open("rb") as stream:
             actual = hashlib.file_digest(stream, "sha256").hexdigest()
         if actual != expected:
-            raise EngineError("Файлы модели повреждены. Заново распакуйте проверенный ZIP.")
+            raise EngineError("Файлы модели не совпали с проверенной версией. Выберите правильную папку или повторите scripts/acquire_model.py.")
 
 
 def windows(total):

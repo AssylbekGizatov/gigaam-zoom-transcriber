@@ -19,6 +19,13 @@ credentials*
 *.flac
 *.mp3
 *.mp4
+*.m4a
+*.aac
+*.ogg
+*.webm
+*.pcm
+*.onnx
+*.safetensors
 *.zip
 *.log
 dist/

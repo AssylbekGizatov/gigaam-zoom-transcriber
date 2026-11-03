@@ -7,7 +7,7 @@ root = Path(__file__).resolve().parents[1]
 files = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
 for name in filter(None, files):
     path = Path(name)
-    if (path.suffix.lower() in {".wav", ".flac", ".mp3", ".mp4", ".sqlite", ".dpapi", ".db"}
+    if (path.suffix.lower() in {".wav", ".flac", ".mp3", ".mp4", ".m4a", ".aac", ".ogg", ".webm", ".pcm", ".onnx", ".safetensors", ".sqlite", ".dpapi", ".db"}
             or name.startswith(("models/", "sessions/", ".env")) and name != ".env.example"
             or path.name in {"settings.json", "credentials.json"}):
         raise SystemExit("Private/runtime artifact is tracked: " + name)

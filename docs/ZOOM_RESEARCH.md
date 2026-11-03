@@ -1,5 +1,8 @@
 # Zoom: выбранный путь и проверенные ограничения
 
+**Исторический RTMS-анализ.** Новый бесплатный путь и актуальная политика
+Meeting SDK: [RESEARCH_ZOOM_CAPTURE](RESEARCH_ZOOM_CAPTURE.md).
+
 Проверено 16 октября 2026 года по официальным документам Zoom и интерфейсу
 личного General App Development. В нём сохранена WebSocket-подписка на три RTMS
 lifecycle events и включён Public Client OAuth/PKCE. На реальном сервисе также

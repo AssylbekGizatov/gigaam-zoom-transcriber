@@ -25,7 +25,7 @@ TIMING_NOTE = (
     "Предварительный текст может измениться. Пропуски аудио перечислены отдельно."
 )
 _SENSITIVE = re.compile(r"secret|token|password|authorization|credential|signature|passcode|join_url|meeting_url", re.I)
-_SEGMENT_FIELDS = ("id", "speaker_id", "display_name", "start", "end", "text", "status", "source_epoch")
+_SEGMENT_FIELDS = ("id", "speaker_id", "display_name", "start", "end", "text", "status", "source_epoch", "attribution")
 
 
 def format_time(seconds: float) -> str:
@@ -85,7 +85,7 @@ def _record(segment: Any) -> dict:
 def _label(record: dict) -> str:
     return (f"[{format_time(record['start'])} - {format_time(record['end'])}] "
             f"{record['display_name']} [ID {record['speaker_id']}; "
-            f"epoch {record['source_epoch']}; {record['status']}; segment {record['id']}]")
+            f"epoch {record['source_epoch']}; {record['status']}; {record.get('attribution') or 'zoom_source_id'}; segment {record['id']}]")
 
 
 def _events(store: Any) -> Iterable[dict]:
@@ -102,6 +102,13 @@ def _events(store: Any) -> Iterable[dict]:
 
 
 def _timing_note(metadata: dict) -> str:
+    if metadata.get("capture_mode") == "desktop_loopback":
+        return ("Время от включения локального захвата; более ранняя речь недоступна. "
+                "Звук выбранного выхода Windows смешанный. ID локальные, это не Zoom ID. "
+                "zoom_ui_hint — предположение по доступной метке говорящего в Zoom, "
+                "local_microphone — ваш микрофон, voice_cluster — приблизительное различение голосов, unattributed_mix — имя неизвестно, "
+                "manual — имя исправлено пользователем. Одновременная речь не разделяется. "
+                "Аудио и видео не сохранялись; распознавание выполнялось на этом компьютере.")
     if metadata.get("time_basis") == "track":
         return ("Время от начала каждой дорожки. Общая шкала встречи не установлена. "
                 "Имена взяты из названий файлов Zoom, ID обозначают дорожки, а не участников Zoom.")
@@ -138,9 +145,9 @@ def _text(store: Any, stream: Any, markdown: bool, metadata: dict) -> None:
 
 
 def _json(store: Any, stream: Any, metadata: dict) -> None:
-    stream.write('{"schema_version":1,"timing":')
+    stream.write('{"schema_version":2,"timing":')
     json.dump({"meeting": "meeting_seconds", "first_audio": "first_audio_seconds",
-               "track": "track_seconds"}.get(
+               "track": "track_seconds", "local_capture": "local_capture_seconds"}.get(
         metadata.get("time_basis"), "rtms_session_seconds"), stream)
     stream.write(',"note":')
     json.dump(_timing_note(metadata), stream, ensure_ascii=False)

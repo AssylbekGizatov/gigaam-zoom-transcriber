@@ -1,4 +1,4 @@
-"""Plain immutable contracts shared by the RTMS adapter, worker and exports."""
+"""Immutable contracts shared by desktop/RTMS adapters, worker and exports."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ class AudioPacket:
     user_id: str
     user_name: str | None
     timestamp_ms: int
-    pcm: bytes  # Signed little-endian PCM16, mono; contains one Zoom source.
+    pcm: bytes  # Signed little-endian PCM16 mono; adapter source may be mixed.
     sample_rate: int = 16000
     epoch: str = "0"  # A new transport generation after every reconnect.
 
@@ -25,13 +25,14 @@ class Word:
 @dataclass(frozen=True, slots=True)
 class Segment:
     id: str
-    speaker_id: str  # Real Zoom source ID, never a guessed account/person ID.
+    speaker_id: str  # RTMS source ID or explicit local: ID; see attribution.
     display_name: str
     start: float
     end: float
     text: str
     status: Literal["preliminary", "final"] = "final"
     source_epoch: str = "0"
+    attribution: str = "zoom_source_id"
 
 
 @dataclass(frozen=True, slots=True)

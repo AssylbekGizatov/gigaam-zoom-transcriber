@@ -1,0 +1,289 @@
+{
+  "created_at_utc": "2026-11-03T20:36:46.312312+00:00",
+  "scope": "Live public WAV playback through actual Windows WASAPI output loopback and local GigaAM",
+  "live_zoom_meeting_tested": false,
+  "microphone_tested": false,
+  "zoom_speaker_names_tested": false,
+  "simultaneous_speech_tested": false,
+  "natural_code_switching_tested": false,
+  "audio_files_written": 0,
+  "diarization_enabled": true,
+  "speaker_attribution": "anonymous local voice clusters + unknown; no true person names or Zoom IDs",
+  "machine": {
+    "os": "Windows",
+    "release": "11",
+    "architecture": "AMD64",
+    "processor": "Intel64 Family 6 Model 165 Stepping 2, GenuineIntel",
+    "logical_cpus": 8,
+    "python": "3.12.3",
+    "physical_memory_mib": 8029.0078125
+  },
+  "versions": {
+    "PyAudioWPatch": "0.2.12.8",
+    "numpy": "2.2.6",
+    "torch": "2.10.0+cpu",
+    "torchaudio": "2.10.0+cpu",
+    "gigaam": "0.2.0",
+    "psutil": "7.0.0",
+    "sherpa-onnx": "2.0.1"
+  },
+  "model_revision": "2f8a57144e6ec3adfd32fe0484d9ea9913305bc8",
+  "code_revision": "7447938d791c4f3e643386ee22c33777004293a5",
+  "implementation_sha256": {
+    "gigaam_zoom/desktop_audio.py": "04c0a141bbd133f2fdd2c5a050a4eb4902721f0830cc6cfcdf58abbbc9d64372",
+    "gigaam_zoom/desktop_attribution.py": "dd0cfc3d58ce116c2c7955110f8a6635b581980435bad5d3cdf6c7033090048c",
+    "gigaam_zoom/engine.py": "abfee6c99e15eb76dc21278dcb645c5dd806e63a0d9e355950972acc183efd38",
+    "gigaam_zoom/pipeline.py": "384ee7a225449790db2b16f6afa2a549aa090ba6fa3df89847383c946be971fd",
+    "scripts/evaluate_desktop.py": "edbff08f9938656f880fece7096161db8becbb24636311f6cee3d60b1d06a1cc",
+    "gigaam_zoom/diarization.py": "af844405b160a6ece453da4a429f85c7e93ef0ab5385fa6f5d8640ea1a87c625"
+  },
+  "measurement_limits": [
+    "One run on a busy user PC; RSS is sampled every 50 ms, not a guaranteed maximum",
+    "CPU machine percent divides process CPU time by logical CPU count",
+    "Latency is relative to model-estimated last word time, not independent human alignment",
+    "Only 52 reference words; no evidence of general meeting accuracy",
+    "Output endpoint mixes all applications; test requires other audio apps quiet",
+    "No Zoom/network/media-delivery or UI speaker matching validated by this test",
+    "Wall real_time_factor includes paced playback, silence and startup; inference ratio is reported separately",
+    "Voice-cluster coverage does not validate identity accuracy; the same 52 public words are a smoke test, not an independent benchmark"
+  ],
+  "cold_model_load": {
+    "wall_seconds": 15.583174199971836,
+    "process_cpu_seconds": 14.796875,
+    "cpu_percent_one_core": 94.95417820604702,
+    "cpu_percent_machine": 11.869272275755877,
+    "sampled_peak_rss_mib": 1899.78125,
+    "rss_sampling_interval_seconds": 0.05,
+    "real_time_factor": null
+  },
+  "diarization_model_load": {
+    "wall_seconds": 3.379645699984394,
+    "process_cpu_seconds": 2.421875,
+    "cpu_percent_one_core": 71.66061815329292,
+    "cpu_percent_machine": 8.957577269161614,
+    "sampled_peak_rss_mib": 1961.359375,
+    "rss_sampling_interval_seconds": 0.05,
+    "real_time_factor": null
+  },
+  "diarization_model_sha256": "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2",
+  "diarization_model_id": "campplus",
+  "diarization_threshold_profile": {
+    "match_threshold": 0.6,
+    "new_threshold": 0.35,
+    "margin": 0.1,
+    "half_similarity": 0.45
+  },
+  "audio_format": {
+    "render_sample_rate": 48000,
+    "render_channels": 2,
+    "asr_sample_rate": 16000,
+    "asr_channels": 1
+  },
+  "live_processing": {
+    "wall_seconds": 39.30411060003098,
+    "process_cpu_seconds": 37.546875,
+    "cpu_percent_one_core": 95.52913022784544,
+    "cpu_percent_machine": 11.94114127848068,
+    "sampled_peak_rss_mib": 1841.58203125,
+    "rss_sampling_interval_seconds": 0.05,
+    "real_time_factor": 1.3682893159279714
+  },
+  "capture_metrics": {
+    "captured_seconds": 36.66000000000013,
+    "dropped_seconds": 0.0,
+    "hardware_overflows": 0,
+    "clock_discontinuities": 0,
+    "peak_pending_seconds": 0.02,
+    "output_packets": 1833,
+    "remote_rms": 1.7059844594768947e-06,
+    "microphone_rms": 0.0,
+    "pending_seconds": 0.0,
+    "failed": false
+  },
+  "pipeline_metrics": {
+    "audio_seconds": 40.66,
+    "inference_seconds": 13.616336699924432,
+    "peak_pending_seconds": 13.3,
+    "dropped_seconds": 0.0,
+    "windows": 8,
+    "segments": 12,
+    "last_result_delay_seconds": 0.7970000000204891,
+    "pending_seconds": 0.0,
+    "active_sources": 0,
+    "real_time_factor": 0.3348828504654312
+  },
+  "final_segment_count": 12,
+  "gap_count": 0,
+  "source_ids": [
+    "local:remote",
+    "local:voice:001",
+    "local:voice:002",
+    "local:voice:003"
+  ],
+  "attributions": [
+    "unattributed_mix",
+    "voice_cluster"
+  ],
+  "voice_grouping": {
+    "anonymous_cluster_count": 3,
+    "word_count": 52,
+    "words_with_cluster_estimate": 34,
+    "word_coverage": 0.6538461538461539,
+    "true_identity_accuracy_validated": false,
+    "overlap_accuracy_validated": false,
+    "note": "Coverage measures labels emitted, not correctness; no named-person inference is made",
+    "cluster_fixture_languages": {
+      "local:voice:001": [
+        "kk"
+      ],
+      "local:voice:002": [
+        "ru"
+      ],
+      "local:voice:003": [
+        "en"
+      ]
+    },
+    "clusters_shared_across_different_fixture_languages": {},
+    "fixture_identity_basis": "The three clips are separate public recordings with distinct corpus/sample provenance; human identities are not independently verified. Shared clusters expose a possible merge, not a biometric identity determination."
+  },
+  "timestamps_valid": true,
+  "samples": [
+    {
+      "fixture": {
+        "language": "kk",
+        "reference": "ішкі су жолдары демалыс үшін жақсы тақырып болуы мүмкін",
+        "source_url": "https://storage.googleapis.com/xtreme_translations/FLEURS102/kk_kz.tar.gz",
+        "source_archive_member": "kk_kz/audio/dev/3173551583057762018.wav",
+        "source_sha256": "ba9b9bd7929c1599847812f9773c2bfc019016fad0ba27e85b0e474238f312d0",
+        "license": "CC BY 4.0",
+        "license_source": "https://huggingface.co/datasets/google/fleurs",
+        "attribution": "FLEURS (Conneau et al., 2022), Google, https://arxiv.org/abs/2205.12446",
+        "selection": "First WAV archive member, matched dev.tsv; chosen before model inference",
+        "modifications": "Original float32 mono 16 kHz WAV converted to PCM16; no trimming or resampling",
+        "sha256": "b2ac9e019a37da61c3a072100a30bf1f4b89c956656dd6ef430871b17c27c140"
+      },
+      "duration_seconds": 11.58,
+      "hypothesis": "ішкі су жолдары демалыс үшін жақсы тақырып болуы мүмкін",
+      "reference_words": 9,
+      "word_edits": 0,
+      "wer": 0.0,
+      "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+      "segment_count": 4,
+      "speaker_label_word_counts": {
+        "local:remote": 8,
+        "local:voice:001": 1
+      }
+    },
+    {
+      "fixture": {
+        "language": "ru",
+        "reference": "ничьих не требуя похвал счастлив уж я надеждой сладкой что дева с трепетом любви посмотрит может быть украдкой на песни грешные мои у лукоморья дуб зеленый",
+        "source_url": "https://cdn.chatwm.opensmodel.sberdevices.ru/GigaAM/example.wav",
+        "license": "Official public GigaAM example in MIT repository; public-domain Pushkin reference",
+        "license_source": "https://github.com/salute-developers/GigaAM",
+        "attribution": "salute-developers GigaAM official public example; text by Alexander Pushkin",
+        "modifications": "none",
+        "reference_scope": "Pinned upstream expected text, not an independent annotation",
+        "sha256": "d8aaaa18a5098d7c6de0595ae7ac1e64cacd0d4022af3595213bdaf23be77e69"
+      },
+      "duration_seconds": 11.29,
+      "hypothesis": "ничьих не требуя похвал счастлив уж я надеждой сладкой что дева с трепетом любви посмотрит может быть украдкой на песни грешные мои у лукоморья дуб зеленый",
+      "reference_words": 26,
+      "word_edits": 0,
+      "wer": 0.0,
+      "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+      "segment_count": 5,
+      "speaker_label_word_counts": {
+        "local:remote": 6,
+        "local:voice:002": 20
+      }
+    },
+    {
+      "fixture": {
+        "language": "en",
+        "reference": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
+        "source_url": "https://huggingface.co/datasets/hf-internal-testing/librispeech_asr_dummy/tree/5be91486e11a2d616f4ec5db8d3fd248585ac07a",
+        "source_sample_id": "1272-128104-0000",
+        "license": "CC BY 4.0",
+        "license_source": "https://www.openslr.org/12/",
+        "attribution": "LibriSpeech ASR corpus (Vassil Panayotov, Guoguo Chen, Daniel Povey, Sanjeev Khudanpur, ICASSP 2015), CC BY 4.0, https://www.openslr.org/12/ . One unchanged recording from the Hugging Face Internal Testing LibriSpeech dummy subset; dataset loader links the original OpenSLR corpus.",
+        "modifications": "lossless FLAC decoded to PCM16 WAV; no resampling or trimming",
+        "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46"
+      },
+      "duration_seconds": 5.855,
+      "hypothesis": "mr quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+      "reference_words": 17,
+      "word_edits": 1,
+      "wer": 0.058823529411764705,
+      "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved",
+      "segment_count": 3,
+      "speaker_label_word_counts": {
+        "local:remote": 4,
+        "local:voice:003": 13
+      }
+    }
+  ],
+  "sequential_multilingual": {
+    "reference_words": 52,
+    "word_edits": 1,
+    "wer": 0.019230769230769232,
+    "normalization": "Unicode casefold; ё to е; punctuation removed; digits preserved"
+  },
+  "result_after_last_word_seconds": [
+    6.435,
+    5.234999999999999,
+    3.795,
+    6.127539325839438,
+    10.59799999997951,
+    5.877999999979508,
+    4.29399999998277,
+    4.224999999999998,
+    3.625,
+    8.638391304306847,
+    5.008282608654675,
+    3.891326086915541
+  ],
+  "inference_seconds_per_fixture_second": 0.47402390600259114,
+  "exports": [
+    {
+      "format": "TXT",
+      "bytes": 4047,
+      "parsed_successfully": true,
+      "transcript_content_present": true,
+      "visual_layout_rechecked": false
+    },
+    {
+      "format": "MD",
+      "bytes": 4178,
+      "parsed_successfully": true,
+      "transcript_content_present": true,
+      "visual_layout_rechecked": false
+    },
+    {
+      "format": "DOCX",
+      "bytes": 38394,
+      "parsed_successfully": true,
+      "transcript_content_present": true,
+      "visual_layout_rechecked": false
+    },
+    {
+      "format": "PDF",
+      "bytes": 29236,
+      "parsed_successfully": true,
+      "transcript_content_present": true,
+      "visual_layout_rechecked": false
+    },
+    {
+      "format": "JSON",
+      "bytes": 5865,
+      "parsed_successfully": true,
+      "transcript_content_present": true,
+      "visual_layout_rechecked": false
+    }
+  ],
+  "event_kinds": [
+    "capture_stopped",
+    "stopped"
+  ],
+  "blocked_python_network_attempts": 0
+}
