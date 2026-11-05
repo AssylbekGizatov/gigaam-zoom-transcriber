@@ -19,6 +19,8 @@ KK/RU/EN речи. На i5‑10300H/8 ГБ: пик RSS около 1,9 ГБ, CPU 
 
 ## Запуск на Windows / из IDE
 
+**Впервые запускаете из ZIP?** Начните с [пошаговой инструкции для Windows, Microsoft Visual Studio и VS Code](docs/WINDOWS_ZIP_VISUAL_STUDIO.md): скачивание без клонирования, установка, модель, запуск и частые ошибки.
+
 Нужны Python 3.12 x64 с Tcl/Tk, Git, Windows 10/11.
 
 ```powershell
