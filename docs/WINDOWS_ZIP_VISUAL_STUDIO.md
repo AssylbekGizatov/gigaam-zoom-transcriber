@@ -359,7 +359,7 @@ Hugging Face token, `.env` или ручные переменные окруже
    → **Add Environment → Existing environment → Custom**.
    Укажи `<папка проекта>\.venv` как базовую папку окружения и проверь,
    что **Interpreter path** заканчивается на `.venv\Scripts\python.exe`.
-   Затем выбери это окружение в панели запуска.
+   Нажми **Add / Добавить**, затем выбери это окружение в панели запуска.
    [Как добавить существующее окружение](https://learn.microsoft.com/en-us/visualstudio/python/managing-python-environments-in-visual-studio?view=vs-2022#manually-identify-an-existing-environment).
 4. Рабочая папка должна быть **корнем проекта**, где `app.py` и `models`.
    При открытии именно этой папки и выборе корневого `app.py` это стандартное
