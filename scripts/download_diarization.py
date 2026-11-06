@@ -1,54 +1,38 @@
-"""Explicit one-time public model download; inference itself stays offline."""
+"""Install pinned voice models from this GitHub repository; no Hugging Face."""
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 from pathlib import Path
 import sys
-import tempfile
-import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from gigaam_zoom.diarization import SPEAKER_MODELS
+from gigaam_zoom.model_assets import ROOT, install_artifact, manifest, release_url, write_provenance
+
+
+def acquire(directory, model="campplus", *, source_directory=None, check=False):
+    if model not in ("campplus", "wespeaker"):
+        raise ValueError("Unknown speaker model")
+    name = f"{model}.onnx"
+    install_artifact(name, directory, source_directory=source_directory, check=check)
+    spec = manifest()["artifacts"][name]
+    write_provenance(Path(directory) / f"{model}.provenance.json", {
+        "model": model, "url": release_url(name), **spec,
+        "notices": "assets/README.md and assets/licenses (included in the project ZIP)",
+    }, check=check)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download pinned local voice-clustering model (CAM++ 28.3 MB)")
-    parser.add_argument("--model", choices=tuple(SPEAKER_MODELS), default="campplus")
-    parser.add_argument("--directory", type=Path,
-                        default=Path(__file__).resolve().parents[1] / "models" / "diarization")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", choices=("campplus", "wespeaker"), default="campplus")
+    parser.add_argument("--directory", type=Path, default=ROOT / "models/diarization")
+    parser.add_argument("--source-directory", type=Path, help="Copy .onnx files from a local directory instead of downloading")
+    parser.add_argument("--check", action="store_true", help="Verify existing files only; no network requests or writes")
     args = parser.parse_args()
-    spec = SPEAKER_MODELS[args.model]
-    args.directory.mkdir(parents=True, exist_ok=True)
-    destination = args.directory / spec.filename
-    temporary = None
     try:
-        digest = hashlib.sha256()
-        size = 0
-        with tempfile.NamedTemporaryFile(dir=args.directory, suffix=".part", delete=False) as output:
-            temporary = Path(output.name)
-            with urllib.request.urlopen(spec.url, timeout=60) as response:
-                while chunk := response.read(1024 * 1024):
-                    size += len(chunk)
-                    if size > spec.size_bytes:
-                        raise RuntimeError("Unexpected model size")
-                    digest.update(chunk)
-                    output.write(chunk)
-        if size != spec.size_bytes or digest.hexdigest() != spec.sha256:
-            raise RuntimeError("Model checksum verification failed")
-        temporary.replace(destination)
-        (args.directory / f"{spec.model_id}.provenance.json").write_text(json.dumps({
-            "model": spec.model_id,
-            "url": spec.url, "sha256": spec.sha256, "bytes": spec.size_bytes,
-            "license": spec.license, "license_url": spec.license_url,
-            "model_card": spec.model_card, "attribution": spec.attribution,
-            "modifications": "ONNX conversion by sherpa-onnx; no additional model modifications here",
-        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print("Проверенная модель голосов установлена:", destination)
-    finally:
-        if temporary is not None and temporary.exists():
-            temporary.unlink()
+        acquire(args.directory, args.model, source_directory=args.source_directory, check=args.check)
+    except (OSError, ValueError, RuntimeError) as exc:
+        parser.exit(1, f"Speaker model installation/check failed: {exc}\n")
+    print("Verified local speaker model:", args.directory / f"{args.model}.onnx")
 
 
 if __name__ == "__main__":

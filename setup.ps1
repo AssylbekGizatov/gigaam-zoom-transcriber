@@ -6,5 +6,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 x64 with Tcl/Tk first.' }
 if ($LASTEXITCODE -ne 0) { throw 'CPU PyTorch installation failed.' }
 & ./.venv/Scripts/python.exe -m pip install -r requirements-desktop.txt -c constraints.txt
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
-Write-Host 'Dependencies ready. To acquire verified model weights: ./.venv/Scripts/python.exe scripts/acquire_model.py'
+& ./.venv/Scripts/python.exe scripts/acquire_model.py
+if ($LASTEXITCODE -ne 0) { throw 'GitHub model installation failed. See docs/WINDOWS_ZIP_VISUAL_STUDIO.md.' }
+Write-Host 'Dependencies and verified local GigaAM model are ready. No Hugging Face or Git required.'
 Write-Host 'Or choose an existing verified local GigaAM model folder in the UI.'

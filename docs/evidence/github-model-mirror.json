@@ -1,0 +1,38 @@
+{
+  "verified_at_utc": "2026-11-06T07:35:00.820124+00:00",
+  "release": "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/tag/models-v1",
+  "release_publication_workflow": "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/actions/runs/42181078134",
+  "fresh_download_checks": {
+    "pytorch_model.bin": {
+      "bytes": 883170115,
+      "sha256": "e1db43873ec5e296f229572e06e2470fc157ac9f8d4aacabda295630b9b91728",
+      "downloaded_from": "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/download/models-v1/pytorch_model.bin"
+    },
+    "campplus.onnx": {
+      "bytes": 28281164,
+      "sha256": "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2",
+      "downloaded_from": "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/download/models-v1/campplus.onnx"
+    },
+    "wespeaker.onnx": {
+      "bytes": 26530550,
+      "sha256": "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
+      "downloaded_from": "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/download/models-v1/wespeaker.onnx"
+    }
+  },
+  "local_tests": {
+    "passed": 227,
+    "skipped": 2,
+    "scope": "Linux unit tests; platform-dependent checks skipped"
+  },
+  "dependency_install": {
+    "git_executable_excluded_from_PATH": true,
+    "pip_check": "No broken requirements found",
+    "platform": "Linux Python 3.12"
+  },
+  "offline_runtime_from_github_weights": {
+    "gigaam_load_and_synthetic_inference": true,
+    "campplus_embedding_dimensions": 192,
+    "python_network_attempts": 0
+  },
+  "limits": "Not a Windows desktop/Visual Studio or live Zoom acceptance test; first-time Python packages still need PyPI/PyTorch connectivity."
+}

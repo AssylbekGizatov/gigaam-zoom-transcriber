@@ -7,14 +7,38 @@
 
 ## Однократная подготовка
 
-Из корня проекта в виртуальном окружении:
+Из корня проекта после установки основного окружения:
 
 ```powershell
-python -m pip install -r requirements-diarization.txt
-python scripts/download_diarization.py
+./.venv/Scripts/python.exe -m pip install -r requirements-diarization.txt -c constraints.txt
+./.venv/Scripts/python.exe scripts/download_diarization.py
 ```
 
-Загрузка модели — единственный сетевой шаг этого модуля. `SherpaSpeakerEmbedder`
+Установка Python-пакетов обращается к PyPI. Отдельная команда загрузки модели
+обращается только к [релизу models-v1 этого репозитория](https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/tag/models-v1)
+за `campplus.onnx` (или `wespeaker.onnx` при `--model wespeaker`).
+GitHub перенаправляет скачивание на `release-assets.githubusercontent.com`.
+Hugging Face не используется для установки или скачивания, автоматического
+резервного источника нет. Ссылки на исходные карточки ниже сохранены для атрибуции.
+
+Проверить установленную CAM++ без сети:
+
+```powershell
+./.venv/Scripts/python.exe scripts/download_diarization.py --check
+```
+
+Для одобренного ручного переноса скачайте нужный `.onnx` из **Assets** того же
+релиза, сохраните его имя и укажите папку:
+
+```powershell
+./.venv/Scripts/python.exe scripts/download_diarization.py --source-directory "C:\GigaAM-Transfer"
+```
+
+Для WeSpeaker добавьте `--model wespeaker` также при переносе или проверке.
+Эти команды не заменяют установку пакетов и не являются полным офлайн-установщиком.
+[Пошаговая инструкция и корпоративные ограничения](WINDOWS_ZIP_VISUAL_STUDIO.md#6-скачать-модель-распознавания).
+
+`SherpaSpeakerEmbedder`
 не скачивает файлы автоматически и не отправляет аудио. Модель помещается в
 `models/diarization/campplus.onnx`; папка исключена из Git. Повреждённая модель
 или несовпадающая контрольная сумма не загружаются. Нужны
@@ -48,7 +72,7 @@ Efficient Network for Speaker Verification Using Context-Aware Masking”, 2023*
 
 Для воспроизведения сравнения сохранён дополнительный профиль **WeSpeaker VoxCeleb
 ResNet34-LM** (256-dimensional embedding, 26 530 550 байт, CC BY 4.0; авторы WeSpeaker
-team, Wang et al., ICASSP 2023). Его загрузка: `python scripts/download_diarization.py --model wespeaker`.
+team, Wang et al., ICASSP 2023). Его загрузка: `./.venv/Scripts/python.exe scripts/download_diarization.py --model wespeaker`.
 [Закреплённая карточка WeSpeaker](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/tree/f0c48c298fd835726c27956a5d617bad7115627e),
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 SHA-256 WeSpeaker:
@@ -79,6 +103,9 @@ SHA-256 WeSpeaker:
 разделить одного человека или объединить разных людей.
 
 ## Что измерено
+
+Следующие результаты получены до замены источников загрузки. Они не являются
+новой проверкой установки из ZIP или новой реальной Zoom-встречи.
 
 [Машинный отчёт CAM++](evidence/desktop-diarization-campplus.json) получен на пользовательском
 Windows 11, 8 логических CPU, 8 029 MiB RAM. Настоящая ONNX-модель обработала
@@ -131,8 +158,8 @@ GigaAM и экспорт](evidence/desktop-loopback-campplus.json). Три пу�
 тестирования:
 
 ```powershell
-python scripts/evaluate_diarization.py --fixtures ПУТЬ_К_ПУБЛИЧНЫМ_FIXTURES
-python -m pytest tests/test_diarization.py -q
+./.venv/Scripts/python.exe scripts/evaluate_diarization.py --fixtures ПУТЬ_К_ПУБЛИЧНЫМ_FIXTURES
+./.venv/Scripts/python.exe -m pytest tests/test_diarization.py -q
 ```
 
 В отчёт не входят аудио, локальные абсолютные пути или личные встречи. Неизвестные

@@ -11,7 +11,7 @@ Windows-приложение получает **живой звук во вре�
 Обычные расходы существующего Zoom-плана, интернета и электричества приложение
 не отменяет; новых платных сервисов оно не вызывает.
 
-**Проверено:** настоящий выход Windows → GigaAM → пять экспортов на публичной
+**Ранее проверено (до замены способа установки):** настоящий выход Windows → GigaAM → пять экспортов на публичной
 KK/RU/EN речи. На i5‑10300H/8 ГБ: пик RSS около 1,9 ГБ, CPU в среднем 12,17%,
 задержка готовых реплик 2,44–6,02 с, пропусков нет в одном коротком прогоне.
 **Реальная Zoom-встреча пока не подтверждена.** Подписи говорящих вероятностные,
@@ -21,19 +21,37 @@ KK/RU/EN речи. На i5‑10300H/8 ГБ: пик RSS около 1,9 ГБ, CPU 
 
 **Впервые запускаете из ZIP?** Начните с [пошаговой инструкции для Windows, Microsoft Visual Studio и VS Code](docs/WINDOWS_ZIP_VISUAL_STUDIO.md): скачивание без клонирования, установка, модель, запуск и частые ошибки.
 
-Нужны Python 3.12 x64 с Tcl/Tk, Git, Windows 10/11.
+Нужны Python 3.12 x64 с Tcl/Tk и Windows 10/11. **Git и Hugging Face не нужны.**
+Скачайте **Code → Download ZIP** из этого репозитория, распакуйте архив и откройте
+терминал в папке с `app.py`. Затем:
 
 ```powershell
-git clone https://github.com/AssylbekGizatov/gigaam-zoom-transcriber.git
-cd gigaam-zoom-transcriber
 ./setup.ps1
-./.venv/Scripts/python.exe scripts/acquire_model.py
+./.venv/Scripts/python.exe scripts/acquire_model.py --check
 ./.venv/Scripts/python.exe scripts/download_diarization.py
 ./start.ps1
 ```
 
-Можно выбрать уже имеющиеся проверенные веса GigaAM. Загрузка весов — отдельное
-явное действие; во время сеанса модель не скачивается. Если Windows блокирует
+`setup.ps1` устанавливает библиотеки и автоматически подготавливает GigaAM.
+Следующая команда `--check` только проверяет локальные файлы без сети;
+скачивание CAM++ необязательно. Для ручной установки или переноса весов
+используйте пошаговую инструкцию выше.
+
+Минимальный код GigaAM включён в `vendor/gigaam`, JSON, карточка модели и условия
+MIT находятся в `assets/gigaam`. `huggingface_hub` и `transformers` не нужны.
+Большие веса скачиваются отдельно только из [GitHub Release models-v1 этого репозитория](https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/tag/models-v1):
+GigaAM около 900 МБ, необязательный CAM++ около 28 МБ. Они не входят в исходный ZIP
+и не используют Git LFS. Это не полный офлайн-установщик: библиотеки один раз
+загружаются с PyPI и CPU-индекса PyTorch.
+
+Оба загрузчика поддерживают `--check` для проверки без сети и
+`--source-directory ПАПКА` для разрешённого ручного переноса весов.
+[Команды, ручная загрузка и корпоративная сеть](docs/WINDOWS_ZIP_VISUAL_STUDIO.md#6-скачать-модель-распознавания).
+Автоматического возврата к Hugging Face нет.
+
+Можно выбрать уже имеющиеся проверенные веса GigaAM. Загрузка весов выполняется
+при подготовке через `setup.ps1` или отдельный загрузчик; во время сеанса модель
+не скачивается. Если Windows блокирует
 скрипт, выполните его команды в терминале IDE, не меняя политику безопасности.
 
 **IDE:** открыть корень в VS Code/PyCharm → интерпретатор
@@ -88,6 +106,9 @@ PCM остаётся только в RAM. Папка не шифруется п�
 - [Исследование SHAI, Granola, Fireflies, Recall](docs/RESEARCH_ZERO_COST_LIVE.md)
 - [Zoom SDK, RTMS и бесплатный захват](docs/RESEARCH_ZOOM_CAPTURE.md)
 - [Аппаратные тесты, измерения и незакрытые проверки](docs/DESKTOP_TESTING.md)
+- [Новая проверка Linux CPU без сети и Hugging Face](docs/evidence/no-huggingface-runtime.json):
+  реальная публичная речь, ноль сетевых попыток, совпадение текста и таймкодов
+  с закреплённой исходной реализацией на этом примере. Не тест Windows или Zoom.
 - [Лицензии](NOTICE.md)
 - [Инструкция будущему агенту по Zoom](docs/README_INSTRUCTIONS_FOR_FUTURE_IN_ZOOM.md)
 

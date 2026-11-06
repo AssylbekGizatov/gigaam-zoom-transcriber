@@ -38,7 +38,7 @@ SPEAKER_MODELS = {
     "campplus": SpeakerModelSpec(
         "campplus", "campplus.onnx", 28281164,
         "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2",
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
+        "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/download/models-v1/campplus.onnx",
         "Apache-2.0", "https://www.apache.org/licenses/LICENSE-2.0",
         "https://modelscope.cn/models/iic/speech_campplus_sv_zh_en_16k-common_advanced",
         "3D-Speaker / Tongyi Lab; Hui Wang et al., CAM++, arXiv:2303.00332; ModelScope v1.0.0; Sherpa ONNX export",
@@ -47,7 +47,7 @@ SPEAKER_MODELS = {
     "wespeaker": SpeakerModelSpec(
         "wespeaker", "wespeaker.onnx", 26530550,
         "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx",
+        "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/download/models-v1/wespeaker.onnx",
         "CC-BY-4.0", "https://creativecommons.org/licenses/by/4.0/",
         "https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/tree/f0c48c298fd835726c27956a5d617bad7115627e",
         "WeSpeaker team; Wang et al., ICASSP 2023; Sherpa ONNX export",

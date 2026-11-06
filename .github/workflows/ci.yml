@@ -28,3 +28,28 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: test-results.xml
           retention-days: 14
+  offline-runtime:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install CPU runtime from bundled GigaAM source
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.10.0+cpu torchaudio==2.10.0+cpu -c constraints.txt
+          python -m pip install -r requirements-desktop.txt -c constraints.txt
+          python -m pip check
+      - name: Acquire pinned models from this repository release only
+        run: |
+          python scripts/acquire_model.py
+          python scripts/download_diarization.py
+          python scripts/acquire_model.py --check
+          python scripts/download_diarization.py --check
+      - name: Load and infer with Python network connections blocked
+        run: python scripts/verify_offline_runtime.py
