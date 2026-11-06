@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "release_repository": "AssylbekGizatov/gigaam-zoom-transcriber",
+  "release_tag": "models-v1",
+  "artifacts": {
+    "pytorch_model.bin": {
+      "bytes": 883170115,
+      "sha256": "e1db43873ec5e296f229572e06e2470fc157ac9f8d4aacabda295630b9b91728",
+      "upstream_url": "https://huggingface.co/ai-sage/GigaAM-Multilingual/resolve/2f8a57144e6ec3adfd32fe0484d9ea9913305bc8/pytorch_model.bin",
+      "license": "MIT",
+      "attribution": "GigaChat Team / ai-sage; GigaAM Multilingual 220M CTC; unchanged weights"
+    },
+    "campplus.onnx": {
+      "bytes": 28281164,
+      "sha256": "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2",
+      "upstream_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
+      "license": "Apache-2.0",
+      "attribution": "3D-Speaker / Tongyi Lab; Hui Wang et al., CAM++, arXiv:2303.00332; ModelScope v1.0.0; Sherpa ONNX export; no further changes"
+    },
+    "wespeaker.onnx": {
+      "bytes": 26530550,
+      "sha256": "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
+      "upstream_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx",
+      "license": "CC-BY-4.0",
+      "attribution": "WeSpeaker team; Wang et al., ICASSP 2023; Sherpa ONNX export; no further changes"
+    }
+  }
+}

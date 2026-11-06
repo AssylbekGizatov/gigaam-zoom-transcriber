@@ -1,0 +1,10 @@
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+Full license: https://creativecommons.org/licenses/by/4.0/legalcode
+License summary: https://creativecommons.org/licenses/by/4.0/
+
+Applies to wespeaker.onnx only. Attribution: WeSpeaker team; Wang et al.,
+ICASSP 2023. Original model: Wespeaker/wespeaker-voxceleb-resnet34-LM,
+revision f0c48c298fd835726c27956a5d617bad7115627e.
+https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/tree/f0c48c298fd835726c27956a5d617bad7115627e
+ONNX conversion by sherpa-onnx. No further model modifications here.
+The license link is provided under section 3(a)(1)(C) of CC BY 4.0.

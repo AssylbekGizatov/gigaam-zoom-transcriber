@@ -1,0 +1,46 @@
+name: Publish verified model mirror
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-models.yml'
+      - 'assets/model-manifest.json'
+permissions:
+  contents: write
+concurrency:
+  group: publish-models-v1
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage original models and verify pinned bytes
+        run: python scripts/publish_model_assets.py --directory work/model-release
+      - name: Publish or verify immutable mirror
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=models-v1
+          if ! gh release view "$tag" --json tagName >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --draft --title 'Verified local models v1 (no Hugging Face access required)' --notes 'Pinned, checksum-verified GigaAM Multilingual CTC and optional CAM++/WeSpeaker ONNX models. See MODEL-NOTICES.md, included licenses, model card and SHA256SUMS.txt. Use the source ZIP from main plus the downloader scripts. These are model files, not a standalone Windows installer.'
+          fi
+          mkdir -p work/existing-assets
+          for file in work/model-release/*; do
+            name="$(basename "$file")"
+            if gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fxq "$name"; then
+              gh release download "$tag" --pattern "$name" --dir work/existing-assets
+              cmp "$file" "work/existing-assets/$name"
+            else
+              gh release upload "$tag" "$file"
+            fi
+          done
+          gh release edit "$tag" --draft=false --latest=false
