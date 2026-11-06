@@ -132,15 +132,15 @@ def test_downloader_cli_works_without_installed_packages_or_git(tmp_path):
 
 
 def test_no_git_or_hub_dependency_in_asr_requirements():
-    requirements = (assets.ROOT / "requirements-asr.txt").read_text()
+    requirements = (assets.ROOT / "requirements-asr.txt").read_text(encoding="utf-8")
     assert "./vendor/gigaam" in requirements
     assert "git+" not in requirements
     import tomllib
-    project = tomllib.loads((assets.ROOT / "vendor/gigaam/pyproject.toml").read_text())["project"]
+    project = tomllib.loads((assets.ROOT / "vendor/gigaam/pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert {x.split("==")[0] for x in project["dependencies"]} == {"hydra-core", "omegaconf"}
     source = assets.ROOT / "vendor/gigaam/gigaam"
     for path in source.glob("*.py"):
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         for forbidden in ("import huggingface_hub", "import transformers", "import requests",
                           "import urllib", "import socket", "torch.hub", "from_pretrained"):
             assert forbidden not in text, f"{path.name}: {forbidden}"
