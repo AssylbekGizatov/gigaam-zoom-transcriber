@@ -13,6 +13,49 @@ from .exports import EXPORT_FORMATS, default_export_name, export_transcript, for
 from .store import Store
 
 
+def speaker_status(payload):
+    name, reason = payload.get("name"), payload.get("evidence", "")
+    if name:
+        method = "OCR Zoom" if reason == "ocr_speaker_view_hint" else "окну Zoom"
+        return f"Имя по {method}: {name}"
+    messages = {
+        "uia_missing": "UIA не отдаёт имя; настройте OCR Speaker View",
+        "uia_scan_incomplete": "UIA не успел проверить окно",
+        "uia_ambiguous": "Несколько меток говорящего",
+        "uia_ambiguous_window": "Открыто несколько окон встречи Zoom",
+        "uia_unavailable": "UIA недоступен",
+        "uia_timeout": "Превышено время чтения UIA",
+        "uia_stale": "Наблюдение имени устарело",
+        "ocr_unavailable": "OCR недоступен; проверьте зависимости Windows",
+        "ocr_dependency_missing": "Установите зависимости из requirements-zoom-ocr.txt",
+        "ocr_windows_only": "OCR доступен только в Windows",
+        "ocr_dpi_unavailable": "Не удалось определить масштаб экрана Windows",
+        "ocr_language_unavailable": "В Windows не установлен выбранный язык OCR",
+        "ocr_not_foreground": "Переключитесь в окно встречи Zoom",
+        "ocr_window_not_foreground": "Переключитесь в окно встречи Zoom",
+        "ocr_window_missing": "Окно встречи Zoom не найдено",
+        "ocr_window_ambiguous": "Открыто несколько окон встречи Zoom",
+        "ocr_window_minimized": "Разверните окно встречи Zoom",
+        "ocr_window_resized": "Размер окна Zoom изменился; заново выберите область имени",
+        "ocr_recalibration_required": "Размер окна Zoom изменился; заново выберите область имени",
+        "ocr_window_too_small": "Увеличьте окно встречи и заново выберите область",
+        "ocr_window_changed": "Окно Zoom изменилось во время чтения; повторная проверка",
+        "ocr_capture_unavailable": "Не удалось получить изображение окна Zoom",
+        "ocr_region_too_small": "Область слишком мала; заново выделите полное имя",
+        "ocr_region_occluded": "Другое окно перекрывает область имени",
+        "ocr_name_clipped": "Имя обрезано; выберите область шире",
+        "ocr_name_missing": "В выбранной области не видно полного имени",
+        "ocr_confirming": "Ожидание повторного чтения имени",
+        "ocr_missing": "В выбранной области не видно имени",
+        "ocr_ambiguous": "В области несколько строк; выберите только имя",
+        "ocr_unstable": "Ожидание повторного чтения имени",
+        "ocr_timeout": "Превышено время чтения OCR",
+        "ocr_stale": "Наблюдение OCR устарело",
+    }
+    detail = messages.get(reason, "Имя не определено")
+    return f"{detail} [{reason}]" if reason else detail
+
+
 class DesktopApplication:
     def __init__(self, root):
         self.root = root
@@ -35,6 +78,10 @@ class DesktopApplication:
         self.name = tk.StringVar(value=config.local_name)
         self.microphone = tk.BooleanVar(value=config.use_microphone)
         self.names = tk.BooleanVar(value=config.read_zoom_names)
+        self.name_mode = tk.StringVar(value=config.zoom_name_mode)
+        self.ocr_region = tk.StringVar(value=config.zoom_ocr_region)
+        self.ocr_language = tk.StringVar(value=config.zoom_ocr_language)
+        self.ocr_client_size = tk.StringVar(value=config.zoom_ocr_client_size)
         self.voices = tk.BooleanVar(value=config.use_diarization)
         self.voice_model = tk.StringVar(value=config.diarization_model)
         self.loopback = tk.StringVar()
@@ -94,6 +141,14 @@ class DesktopApplication:
         ttk.Entry(mic_row, textvariable=self.name, width=16).pack(side="right", padx=(5, 0))
         ttk.Checkbutton(live, text="Проверять имя активного говорящего в окне Zoom (подсказка, возможны ошибки)",
                         variable=self.names).pack(anchor="w", pady=6)
+        name_row = ttk.Frame(live)
+        name_row.pack(fill="x", pady=(0, 6))
+        ttk.Radiobutton(name_row, text="UIA", variable=self.name_mode, value="uia").pack(side="left")
+        ttk.Radiobutton(name_row, text="OCR · Speaker View", variable=self.name_mode, value="ocr").pack(side="left", padx=8)
+        self.calibrate_button = ttk.Button(name_row, text="Выбрать область имени…", command=self.calibrate_name)
+        self.calibrate_button.pack(side="left")
+        ttk.Label(name_row, text="Язык OCR").pack(side="left", padx=(12, 4))
+        ttk.Entry(name_row, textvariable=self.ocr_language, width=9).pack(side="left")
         ttk.Checkbutton(live, text="Различать голоса локально: Говорящий 1, 2… (приблизительно; нужна модель голосов)",
                         variable=self.voices).pack(anchor="w", pady=(0, 6))
         folder_row = ttk.Frame(live)
@@ -153,6 +208,8 @@ class DesktopApplication:
         ttk.Entry(voice_row, textvariable=self.voice_model).pack(side="left", fill="x", expand=True)
         ttk.Button(voice_row, text="Выбрать файл…", command=self.choose_voice_model).pack(side="right", padx=(8, 0))
         ttk.Button(settings, text="Сохранить настройки", command=self.save).pack(anchor="w")
+        ttk.Label(settings, text="Область имени OCR (x, y, ширина, высота; доли клиентской области Zoom)").pack(anchor="w", pady=(12, 3))
+        ttk.Entry(settings, textvariable=self.ocr_region).pack(fill="x")
         help_text = (
             "1. Войдите в звонок в обычном Zoom Workplace. Включать Record не нужно.\n\n"
             "2. Выберите тот же выход звука, что использует Zoom. Наденьте наушники: иначе микрофон может повторно услышать собеседников.\n\n"
@@ -161,7 +218,10 @@ class DesktopApplication:
             "4. «Стоп» завершает принятые фразы. Экспорт доступен в TXT, Markdown, DOCX, PDF и JSON. "
             "SQLite хранит только текст и служебные метки для восстановления после перезапуска.\n\n"
             "Имена: это не API Zoom. Если окно отдаёт явную метку активного говорящего, имя помечено «по окну Zoom». "
-            "Оно может запаздывать. Если метки нет — «не определён». Общий микрофон, одновременная речь и скрытые метки не разделяются. "
+            "Если UIA не видит имя, выберите OCR и выделите подпись главного видео в Speaker View. "
+            "Zoom должен быть на переднем плане; закрепление, Spotlight, галерея и демонстрация экрана не поддерживаются. "
+            "После изменения расположения видео выделите область заново. OCR использует установленный язык Windows (например ru-RU или en-US). "
+            "Имя может запаздывать. Если метки нет — «не определён». Общий микрофон, одновременная речь и скрытые метки не разделяются. "
             "Любую реплику можно подписать вручную. ID здесь локальные, не Zoom ID.\n\n"
             "Нет RTMS, облачного STT, серверов, подписок или счётчика минут. Используются ваш компьютер, электричество и обычное соединение Zoom. "
             "Модель загружается отдельно при установке; во время сеанса интернет для распознавания не нужен.\n\n"
@@ -171,8 +231,12 @@ class DesktopApplication:
         ttk.Label(settings, text=help_text, wraplength=980, justify="left").pack(anchor="w", pady=20)
 
     def settings(self):
-        return DesktopSettings(self.model.get().strip(), self.folder.get().strip(), self.name.get().strip(),
-                               self.microphone.get(), self.names.get(), self.voices.get(), self.voice_model.get().strip())
+        return DesktopSettings(model_dir=self.model.get().strip(), export_dir=self.folder.get().strip(),
+                               local_name=self.name.get().strip(), use_microphone=self.microphone.get(),
+                               read_zoom_names=self.names.get(), use_diarization=self.voices.get(),
+                               diarization_model=self.voice_model.get().strip(), zoom_name_mode=self.name_mode.get(),
+                               zoom_ocr_region=self.ocr_region.get().strip(), zoom_ocr_language=self.ocr_language.get().strip(),
+                               zoom_ocr_client_size=self.ocr_client_size.get())
 
     def background(self, operation):
         if self.busy or self.controller.running:
@@ -211,6 +275,23 @@ class DesktopApplication:
         if value:
             self.voice_model.set(value)
 
+    def calibrate_name(self):
+        if self.busy or self.controller.running:
+            return
+        from .zoom_calibration import begin_calibration
+        self.busy = True
+
+        def finished(region, client_size=None):
+            self.busy = False
+            if region:
+                self.ocr_region.set(region)
+                self.ocr_client_size.set(client_size or "")
+                self.name_mode.set("ocr")
+                self.names.set(True)
+                self.status.set("Область имени выбрана. Сохраните настройки; держите Zoom на переднем плане во время OCR.")
+
+        begin_calibration(self.root, finished)
+
     def save(self):
         settings = self.settings()
         self.background(lambda: (settings.save(), self.post("status", {"message": "Настройки сохранены локально."})))
@@ -225,6 +306,16 @@ class DesktopApplication:
             mic = next((d.index for d in self.devices if d.kind == "microphone" and self.device_label(d) == self.mic_device.get()), None)
             if output is None:
                 raise ValueError("Выберите выход звука Zoom.")
+            if config.read_zoom_names and config.zoom_name_mode == "ocr":
+                if not messagebox.askokcancel(
+                    "Проверка Speaker View", "Для этого сеанса подтвердите настройки Zoom:\n\n"
+                    "• Speaker View, без Pin и Spotlight;\n"
+                    "• нет галереи и демонстрации экрана;\n"
+                    "• выбранная область содержит только полное имя главного видео;\n"
+                    "• расположение видео после выбора области не менялось.\n\n"
+                    "После запуска переключитесь в Zoom и оставьте его на переднем плане. "
+                    "При изменении вида остановите сеанс и заново выберите область имени.", parent=self.root):
+                    return
             self.controller.start(config, output, mic)
             self.status.set("Загрузка модели…")
             self.table.delete(*self.table.get_children())
@@ -301,7 +392,7 @@ class DesktopApplication:
                     self.remote_meter["value"] = payload.get("remote", 0)
                     self.mic_meter["value"] = payload.get("microphone", 0)
                 elif kind == "speaker":
-                    self.speaker.set("Имя по окну Zoom: " + (payload.get("name") or "не определено"))
+                    self.speaker.set(speaker_status(payload))
                 elif kind == "progress":
                     self.metrics.set(f"Очередь: {payload.get('pending_seconds',0):.1f} с · "
                                      f"Обработка/звук: {payload.get('real_time_factor',0):.2f} · "
@@ -321,7 +412,7 @@ class DesktopApplication:
                     if store and str(store.path) == payload.get("path"):
                         segments = payload.get("segments", [])
                         self.table.delete(*self.table.get_children())
-                        labels = {"zoom_ui_hint": "Окно Zoom (?)", "unattributed_mix": "Не определён", "local_microphone": "Мой микрофон", "manual": "Исправлено", "zoom_source_id": "Zoom ID", "voice_cluster": "По голосу (?)"}
+                        labels = {"zoom_ui_hint": "Окно Zoom (?)", "zoom_ocr_hint": "OCR Zoom (?)", "unattributed_mix": "Не определён", "local_microphone": "Мой микрофон", "manual": "Исправлено", "zoom_source_id": "Zoom ID", "voice_cluster": "По голосу (?)"}
                         for item in segments:
                             self.table.insert("", "end", iid=item.id, values=(f"{format_time(item.start)}–{format_time(item.end)}", item.display_name,
                                                                                labels.get(item.attribution, item.attribution), item.text))
@@ -333,6 +424,7 @@ class DesktopApplication:
         self.start_button.configure(state="disabled" if running or self.busy else "normal")
         self.stop_button.configure(state="normal" if running else "disabled")
         self.refresh_button.configure(state="disabled" if running or self.busy else "normal")
+        self.calibrate_button.configure(state="disabled" if running or self.busy else "normal")
         if self.dirty and self.controller.store and not self.busy and not self.snapshot_busy:
             self.snapshot_busy = True
             self.dirty = False

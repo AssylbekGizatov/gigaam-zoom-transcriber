@@ -91,7 +91,10 @@ def observation_from_labels(
         reason = "uia_missing" if not matches else "uia_ambiguous"
         return SpeakerObservation(observed_at_ms, UNKNOWN_SOURCE_ID, None, reason)
     identity, name = next(iter(matches.items()))
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+    # Zoom can reuse the very same UIA element when the speaker changes. A
+    # runtime node identifies a label, not a person; include its current name
+    # so two speakers are never merged merely because they share that label.
+    digest = hashlib.sha256(f"{identity}\0{name}".encode("utf-8")).hexdigest()[:20]
     return SpeakerObservation(observed_at_ms, f"local:zoom-uia:{digest}", name,
                               "uia_explicit_active_speaker_hint")
 
@@ -134,20 +137,62 @@ def _zoom_windows() -> list[tuple[int, int]]:
                     matches.append((int(hwnd), pid.value))
         finally:
             kernel32.CloseHandle(handle)
-        # Cap enumeration output; the caller detects an incomplete window set.
-        return len(matches) < 13
+        # Filter to meeting windows after enumeration. An arbitrary output cap
+        # can hide the meeting behind toolbars, popups, and the Workplace lobby.
+        return True
 
     user32.EnumWindows(visit, 0)
     return matches
 
 
+def _window_metadata(hwnd: int) -> tuple[str, str]:
+    """Read native title/class without traversing a provider's UIA tree."""
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetClassNameW.restype = ctypes.c_int
+    title, class_name = ctypes.create_unicode_buffer(512), ctypes.create_unicode_buffer(256)
+    user32.GetWindowTextW(hwnd, title, len(title))
+    if not user32.GetClassNameW(hwnd, class_name, len(class_name)):
+        raise OSError("Zoom window disappeared while reading its class")
+    return title.value, class_name.value
+
+
+def _is_meeting_window(title: str, class_name: str) -> bool:
+    """Conservative window allowlist; unsupported windows remain unknown.
+
+    Titles identify supported localized clients; the native meeting-content
+    class covers clients whose title includes a custom meeting name. Neither
+    a generic Zoom title nor the floating meeting toolbar qualifies.
+    """
+    if class_name == "ZPToolBarParentWnd":
+        return False
+    return class_name == "ZPContentViewWndClass" or title.strip().casefold() in {
+        "zoom meeting", "конференция zoom", "zoom-встреча",
+    }
+
+
+def _meeting_windows() -> list[tuple[int, int]]:
+    """Visible Zoom-owned meeting roots only, never the lobby or toolbars.
+
+    Callers require exactly one result. Choosing the first of two meetings
+    would attach one meeting's names to an unrelated loopback audio stream.
+    """
+    return [(hwnd, pid) for hwnd, pid in _zoom_windows()
+            if _is_meeting_window(*_window_metadata(hwnd))]
+
+
 def _scan_uia(automation, session_id: str) -> SpeakerObservation:
     started = time.monotonic()
     observed = monotonic_ms()
-    windows = _zoom_windows()
+    windows = _meeting_windows()
     labels: list[AccessibleLabel] = []
-    if len(windows) > 12:
-        return observation_from_labels(labels, observed, complete=False)
+    if len(windows) > 1:
+        return SpeakerObservation(observed, UNKNOWN_SOURCE_ID, None, "uia_ambiguous_window")
     walker = automation.ControlViewWalker
     count = 0
     for hwnd, pid in windows:
@@ -223,19 +268,33 @@ class ZoomSpeakerObserver:
     """
 
     def __init__(self, *, poll_interval: float = 0.75, max_age_ms: int = 2000,
-                 probe_timeout: float = 2.5, _context=None, _worker=None):
+                 probe_timeout: float = 2.5, visual_config=None, _context=None, _worker=None):
         if poll_interval < 0.5 or max_age_ms <= 0 or probe_timeout <= 0:
             raise ValueError("Polling must be at most 2 Hz; timeouts must be positive")
         self.poll_interval = poll_interval
         self.max_age_ms = max_age_ms
         self.probe_timeout = probe_timeout
         self._context = _context or mp.get_context("spawn")
-        self._worker = _worker or _uia_worker
+        self._worker_args = ()
+        self._evidence_prefix = "uia"
+        if visual_config is not None:
+            from .zoom_visual import _visual_worker
+            visual_config.validate()
+            self._worker = _worker or _visual_worker
+            self._worker_args = (visual_config,)
+            self._evidence_prefix = "ocr"
+        else:
+            self._worker = _worker or _uia_worker
         self._session_id = uuid.uuid4().hex
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
-        self._latest = SpeakerObservation(monotonic_ms(), UNKNOWN_SOURCE_ID, None, "uia_not_started")
+        self._latest = self._unknown("not_started")
+
+    def _unknown(self, reason: str, now: int | None = None) -> SpeakerObservation:
+        prefix = self._evidence_prefix
+        return SpeakerObservation(monotonic_ms() if now is None else now,
+                                  f"local:zoom-{prefix}:unknown", None, f"{prefix}_{reason}")
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -250,7 +309,7 @@ class ZoomSpeakerObserver:
         if thread and thread is not threading.current_thread():
             thread.join(timeout=max(0, timeout))
         with self._lock:
-            self._latest = SpeakerObservation(monotonic_ms(), UNKNOWN_SOURCE_ID, None, "uia_stopped")
+            self._latest = self._unknown("stopped")
 
     def latest(self, now_ms: int | None = None) -> SpeakerObservation:
         now = monotonic_ms() if now_ms is None else now_ms
@@ -258,7 +317,7 @@ class ZoomSpeakerObserver:
             result = self._latest
         age = now - result.observed_at_ms
         if age < 0 or age > self.max_age_ms:
-            return SpeakerObservation(now, UNKNOWN_SOURCE_ID, None, "uia_stale")
+            return self._unknown("stale", now)
         return result
 
     def _publish(self, result: SpeakerObservation) -> None:
@@ -276,7 +335,7 @@ class ZoomSpeakerObserver:
                     if process is None:
                         connection, child = self._context.Pipe(duplex=True)
                         process = self._context.Process(target=self._worker,
-                                                        args=(child, self._session_id), daemon=True)
+                                                        args=(child, self._session_id, *self._worker_args), daemon=True)
                         process.start()
                         child.close()
                     connection.send("sample")
@@ -289,13 +348,13 @@ class ZoomSpeakerObserver:
                     if self._stop.is_set():
                         break
                     if not isinstance(result, SpeakerObservation):
-                        self._publish(SpeakerObservation(monotonic_ms(), UNKNOWN_SOURCE_ID, None, "uia_timeout"))
+                        self._publish(self._unknown("timeout"))
                         self._dispose(process, connection)
                         process = connection = None
                     else:
                         self._publish(result)
                 except (OSError, EOFError, RuntimeError, ValueError):
-                    self._publish(SpeakerObservation(monotonic_ms(), UNKNOWN_SOURCE_ID, None, "uia_unavailable"))
+                    self._publish(self._unknown("unavailable"))
                     self._dispose(process, connection)
                     process = connection = None
                 self._stop.wait(max(0, self.poll_interval - (time.monotonic() - cycle_started)))

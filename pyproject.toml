@@ -2,7 +2,7 @@
 name = "gigaam-zoom-transcriber"
 version = "0.2.0"
 description = "Live local Windows meeting transcription with GigaAM and WASAPI, no RTMS required"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.14"
 license = "MIT"
 
 [tool.pytest.ini_options]
