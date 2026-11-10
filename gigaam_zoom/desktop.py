@@ -25,6 +25,22 @@ class DesktopSettings:
     read_zoom_names: bool = True
     use_diarization: bool = False
     diarization_model: str = "models/diarization/campplus.onnx"
+    zoom_name_mode: str = "uia"
+    zoom_ocr_region: str = ""
+    zoom_ocr_language: str = "ru-RU"
+    zoom_ocr_client_size: str = ""
+
+    def visual_config(self):
+        from .zoom_visual import VisualSpeakerConfig
+        try:
+            region = tuple(float(part.strip()) for part in self.zoom_ocr_region.split(","))
+            size = (tuple(int(part.strip()) for part in self.zoom_ocr_client_size.split(","))
+                    if self.zoom_ocr_client_size else None)
+        except (ValueError, AttributeError):
+            raise ValueError("Выберите область имени в окне Zoom для OCR.") from None
+        config = VisualSpeakerConfig(region=region, language=self.zoom_ocr_language, client_size=size)
+        config.validate()
+        return config
 
     def validate(self):
         if not self.model_dir.strip() or not Path(self.model_dir).is_dir():
@@ -35,6 +51,10 @@ class DesktopSettings:
         local_directory(self.export_dir)
         if not self.local_name.strip() or len(self.local_name) > 150:
             raise ValueError("Имя должно содержать от 1 до 150 символов.")
+        if self.zoom_name_mode not in {"uia", "ocr"}:
+            raise ValueError("Выберите источник имён Zoom: UIA или OCR.")
+        if self.read_zoom_names and self.zoom_name_mode == "ocr":
+            self.visual_config()
 
     def save(self, path=None):
         self.validate()
@@ -142,10 +162,13 @@ class DesktopController:
                 "audio_saved": False, "video_saved": False, "cloud_stt": False,
                 "speaker_ids": "local_only_not_zoom_ids", "microphone_enabled": settings.use_microphone,
                 "voice_clustering_enabled": settings.use_diarization,
+                "zoom_name_mode": settings.zoom_name_mode if settings.read_zoom_names else "disabled",
                 "attribution_note": "UI active-speaker hints are uncertain; overlapping voices cannot be separated.",
             }.items():
                 self.store.set_metadata(key, value)
-            timeline = Timeline()
+            # OCR polls every 750 ms. Cover the unobserved interval preceding
+            # a detected switch; Zoom's own display delay remains uncertain.
+            timeline = Timeline(guard_ms=1000 if settings.zoom_name_mode == "ocr" else 300)
             segmenter = DesktopSegmenter(timeline, local_name=settings.local_name, diarization=diarization)
             self.pipeline = Pipeline(self.store, engine, self._pipeline_event, origin_ms=origin,
                                      max_pending_seconds=24, segmenter=segmenter,
@@ -161,7 +184,11 @@ class DesktopController:
                 self.pipeline.feed(AudioPacket("local:" + source, name, timestamp_ms, pcm, rate, epoch))
 
             if settings.read_zoom_names:
-                self.observer = (self.observer_factory or ZoomSpeakerObserver)()
+                if self.observer_factory:
+                    self.observer = self.observer_factory()
+                else:
+                    self.observer = ZoomSpeakerObserver(
+                        visual_config=settings.visual_config() if settings.zoom_name_mode == "ocr" else None)
                 self.observer.start()
             self.capture = (self.capture_factory or DesktopCapture)(
                 loopback_device=loopback_device,

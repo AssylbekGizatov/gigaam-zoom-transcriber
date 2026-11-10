@@ -56,7 +56,10 @@ class Timeline:
     RETENTION_MS = 120_000
     MAX_OBSERVATIONS = 512
 
-    def __init__(self):
+    def __init__(self, *, guard_ms: int = GUARD_MS):
+        if type(guard_ms) is not int or guard_ms < 0:
+            raise ValueError("Защитный интервал должен быть неотрицательным целым числом.")
+        self.guard_ms = guard_ms
         self._entries: deque[_Entry] = deque(maxlen=self.MAX_OBSERVATIONS)
         self._lock = threading.Lock()
 
@@ -68,13 +71,16 @@ class Timeline:
     def _identity(observation: Observation) -> AttributionIdentity:
         source, name = observation.source_id, observation.display_name
         evidence = observation.evidence
-        if (not isinstance(source, str) or not source.startswith("local:zoom-uia:")
-                or source in {"local:zoom-uia:", "local:zoom-uia:unknown"}
+        prefix, method, suffix = {
+            "uia_explicit_active_speaker_hint": ("local:zoom-uia:", "zoom_ui_hint", "по окну Zoom"),
+            "ocr_speaker_view_hint": ("local:zoom-ocr:", "zoom_ocr_hint", "OCR окна Zoom"),
+        }.get(evidence, ("", "", ""))
+        if (not prefix or not isinstance(source, str) or not source.startswith(prefix)
+                or source in {prefix, prefix + "unknown"}
                 or len(source) > 512 or not isinstance(name, str)
-                or not name.strip() or len(name) > 512
-                or evidence != "uia_explicit_active_speaker_hint"):
+                or not name.strip() or len(name) > 512):
             return UNKNOWN
-        return AttributionIdentity(source, name.strip() + " (по окну Zoom)", "zoom_ui_hint")
+        return AttributionIdentity(source, f"{name.strip()} ({suffix})", method)
 
     def add(self, observation: Observation) -> bool:
         at_ms = observation.observed_at_ms
@@ -100,7 +106,7 @@ class Timeline:
     def resolve(self, start_ms: float, end_ms: float) -> AttributionIdentity:
         """Resolve one word in absolute monotonic milliseconds.
 
-        Every point in [start - 300 ms, end + 300 ms] must be covered by a
+        Every point in [start - guard_ms, end + guard_ms] must be covered by a
         non-expired observation of the same source and name. A rename, speaker
         switch, explicit failure, or metadata gap in that interval yields an
         unattributed mixed source. No future-only observation backfills a word.
@@ -110,7 +116,7 @@ class Timeline:
                 or not math.isfinite(start_ms) or not math.isfinite(end_ms)
                 or start_ms < 0 or end_ms < start_ms):
             raise ValueError("Некорректный интервал слова для определения говорящего.")
-        left, right = start_ms - self.GUARD_MS, end_ms + self.GUARD_MS
+        left, right = start_ms - self.guard_ms, end_ms + self.guard_ms
         with self._lock:
             entries = tuple(self._entries)
         current: _Entry | None = None

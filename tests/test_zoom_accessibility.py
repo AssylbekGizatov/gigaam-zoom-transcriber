@@ -39,11 +39,11 @@ def test_duplicate_names_and_multiple_sources_are_unknown():
     assert result.source_id == UNKNOWN_SOURCE_ID
 
 
-def test_rename_preserves_local_ui_identity_rejoin_changes_it():
+def test_reused_label_node_does_not_merge_different_speakers():
     before = observation_from_labels([AccessibleLabel("window1:node1", "Speaking: Alex")], 100)
     renamed = observation_from_labels([AccessibleLabel("window1:node1", "Speaking: Әлия")], 200)
     rejoined = observation_from_labels([AccessibleLabel("window1:node2", "Speaking: Әлия")], 300)
-    assert before.source_id == renamed.source_id
+    assert before.source_id != renamed.source_id
     assert renamed.source_id != rejoined.source_id
     assert renamed.source_id.startswith("local:zoom-uia:")
     assert renamed.display_name == "Әлия"
@@ -165,7 +165,7 @@ class _Automation:
 
 
 def test_native_tree_adapter_filters_foreign_and_hidden_elements(monkeypatch):
-    monkeypatch.setattr(module, "_zoom_windows", lambda: [(100, 5)])
+    monkeypatch.setattr(module, "_meeting_windows", lambda: [(100, 5)])
     root = _Element()
     root.add(_Element("Speaking: Hidden", offscreen=True))
     root.add(_Element("Speaking: Foreign", pid=6))
@@ -175,7 +175,7 @@ def test_native_tree_adapter_filters_foreign_and_hidden_elements(monkeypatch):
 
 
 def test_depth_budget_never_returns_early_candidate_as_certain(monkeypatch):
-    monkeypatch.setattr(module, "_zoom_windows", lambda: [(100, 5)])
+    monkeypatch.setattr(module, "_meeting_windows", lambda: [(100, 5)])
     root = _Element("Speaking: Alice")
     node = root
     for _ in range(14):
@@ -186,10 +186,62 @@ def test_depth_budget_never_returns_early_candidate_as_certain(monkeypatch):
 
 
 def test_node_budget_bounds_broad_tree(monkeypatch):
-    monkeypatch.setattr(module, "_zoom_windows", lambda: [(100, 5)])
+    monkeypatch.setattr(module, "_meeting_windows", lambda: [(100, 5)])
     root = _Element("Speaking: Alice")
     for _ in range(520):
         root.add(_Element())
     result = module._scan_uia(_Automation(root), "test-session")
     assert result.display_name is None
     assert result.evidence == "uia_scan_incomplete"
+
+
+@pytest.mark.parametrize("title,class_name,expected", [
+    ("Zoom Meeting", "unknown-client-class", True),
+    ("Конференция Zoom", "unknown-client-class", True),
+    ("Custom meeting name", "ZPContentViewWndClass", True),
+    ("Zoom Meeting", "ZPToolBarParentWnd", False),
+    ("Zoom Workplace", "ZPHOSTWND", False),
+    ("", "ZPFloatToolbarClass", False),
+    ("Zoom", "unknown-client-class", False),
+    ("Zoom Meeting - Chat", "unknown-client-class", False),
+])
+def test_meeting_window_allowlist(title, class_name, expected):
+    assert module._is_meeting_window(title, class_name) is expected
+
+
+def test_seven_zoom_windows_scan_only_the_meeting(monkeypatch):
+    monkeypatch.setattr(module, "_zoom_windows", lambda: [(n, 5) for n in range(7)])
+    metadata = {
+        0: ("", "ZPToolBarParentWnd"),
+        1: ("Zoom Workplace", "ZPHOSTWND"),
+        2: ("", "Popup"),
+        3: ("", "Popup"),
+        4: ("", "Popup"),
+        5: ("", "Popup"),
+        6: ("Zoom Meeting", "ZPContentViewWndClass"),
+    }
+    monkeypatch.setattr(module, "_window_metadata", metadata.__getitem__)
+
+    class MeetingOnlyAutomation(_Automation):
+        def ElementFromHandle(self, hwnd):
+            assert hwnd == 6  # No UIA calls into expensive non-meeting trees.
+            return self.root
+
+    root = _Element()
+    root.add(_Element("Speaking: Alice"))
+    result = module._scan_uia(MeetingOnlyAutomation(root), "test-session")
+    assert result.display_name == "Alice"
+
+
+def test_multiple_meeting_windows_are_not_arbitrarily_selected(monkeypatch):
+    monkeypatch.setattr(module, "_meeting_windows", lambda: [(100, 5), (200, 5)])
+    result = module._scan_uia(None, "test-session")
+    assert result.display_name is None
+    assert result.evidence == "uia_ambiguous_window"
+
+
+def test_missing_meeting_cannot_read_name_from_workplace(monkeypatch):
+    monkeypatch.setattr(module, "_meeting_windows", lambda: [])
+    result = module._scan_uia(_Automation(_Element("Speaking: Alice")), "test-session")
+    assert result.display_name is None
+    assert result.evidence == "uia_missing"

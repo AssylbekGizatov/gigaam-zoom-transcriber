@@ -1,0 +1,10 @@
+# Optional displayed-name reader. Install with the same Python used for app.py.
+# Native Windows OCR uses installed OS language data, without model downloads.
+pillow==12.3.0
+winrt-runtime==3.2.1; sys_platform == 'win32'
+winrt-Windows.Foundation==3.2.1; sys_platform == 'win32'
+winrt-Windows.Foundation.Collections==3.2.1; sys_platform == 'win32'
+winrt-Windows.Globalization==3.2.1; sys_platform == 'win32'
+winrt-Windows.Media.Ocr==3.2.1; sys_platform == 'win32'
+winrt-Windows.Graphics.Imaging==3.2.1; sys_platform == 'win32'
+winrt-Windows.Storage.Streams==3.2.1; sys_platform == 'win32'
