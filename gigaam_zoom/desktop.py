@@ -9,6 +9,7 @@ import threading
 import time
 from uuid import uuid4
 
+from .app_log import log_event, log_exception
 from .config import data_dir, local_directory
 from .engine import Transcriber, EngineError
 from .models import AudioPacket
@@ -22,13 +23,15 @@ class DesktopSettings:
     export_dir: str = ""
     local_name: str = "Вы"
     use_microphone: bool = False
-    read_zoom_names: bool = True
-    use_diarization: bool = False
-    diarization_model: str = "models/diarization/campplus.onnx"
-    zoom_name_mode: str = "uia"
     zoom_ocr_region: str = ""
-    zoom_ocr_language: str = "ru-RU"
+    zoom_ocr_language: str = ""
     zoom_ocr_client_size: str = ""
+    verbose_logging: bool = False
+    export_format: str = "DOCX"
+    window_geometry: str = ""
+    loopback_name: str = ""
+    microphone_name: str = ""
+    first_run_complete: bool = False
 
     def visual_config(self):
         from .zoom_visual import VisualSpeakerConfig
@@ -38,8 +41,10 @@ class DesktopSettings:
                     if self.zoom_ocr_client_size else None)
         except (ValueError, AttributeError):
             raise ValueError("Выберите область имени в окне Zoom для OCR.") from None
-        config = VisualSpeakerConfig(region=region, language=self.zoom_ocr_language, client_size=size)
+        config = VisualSpeakerConfig(region=region, language=self.zoom_ocr_language or "auto", client_size=size)
         config.validate()
+        if region[2] * region[3] > 0.25:
+            raise ValueError("Выделите только строку с именем говорящего.")
         return config
 
     def validate(self):
@@ -51,13 +56,12 @@ class DesktopSettings:
         local_directory(self.export_dir)
         if not self.local_name.strip() or len(self.local_name) > 150:
             raise ValueError("Имя должно содержать от 1 до 150 символов.")
-        if self.zoom_name_mode not in {"uia", "ocr"}:
-            raise ValueError("Выберите источник имён Zoom: UIA или OCR.")
-        if self.read_zoom_names and self.zoom_name_mode == "ocr":
+        if self.zoom_ocr_region:
             self.visual_config()
 
-    def save(self, path=None):
-        self.validate()
+    def save(self, path=None, *, validate=True):
+        if validate:
+            self.validate()
         target = Path(path) if path else data_dir() / "desktop-settings.json"
         temp = target.with_suffix(".tmp")
         temp.write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), encoding="utf-8")
@@ -67,18 +71,15 @@ class DesktopSettings:
     def load(cls, path=None):
         target = Path(path) if path else data_dir() / "desktop-settings.json"
         if not target.exists():
-            # Migrate only two public paths, never OAuth/RTMS credentials.
-            from .config import Settings
-            try:
-                old = Settings.load()
-                return cls(model_dir=old.model_dir, export_dir=old.export_dir)
-            except (ValueError, OSError, TypeError):
-                return cls()
+            return cls()
         values = json.loads(target.read_text(encoding="utf-8"))
-        if not isinstance(values, dict) or set(values) - set(cls.__dataclass_fields__):
-            raise ValueError("Недопустимые поля настроек локального режима.")
+        if not isinstance(values, dict):
+            raise ValueError("Некорректный файл настроек.")
+        # Preserve the user's device, folders and calibration across upgrades.
+        # Removed settings and any unrelated data are excluded from the next save.
+        values = {k: v for k, v in values.items() if k in cls.__dataclass_fields__}
         for key, value in values.items():
-            if key in {"use_microphone", "read_zoom_names", "use_diarization"}:
+            if key in {"use_microphone", "verbose_logging", "first_run_complete"}:
                 if type(value) is not bool:
                     raise ValueError("Некорректный переключатель в настройках.")
             elif not isinstance(value, str):
@@ -139,17 +140,11 @@ class DesktopController:
         try:
             from .desktop_audio import DesktopCapture
             from .desktop_attribution import Timeline, DesktopSegmenter
-            from .zoom_accessibility import ZoomSpeakerObserver
+            from .speaker_observer import ZoomSpeakerObserver
             self.emit("status", {"message": "Загрузка локальной модели… звук пока не захватывается."})
             engine = self.engine_factory(settings.model_dir)
             engine.load()
-            diarization = None
-            if settings.use_diarization:
-                from .diarization import DiarizationTimeline, OnlineDiarizer, SherpaSpeakerEmbedder
-                self.emit("status", {"message": "Загрузка локальной модели различения голосов…"})
-                embedder = SherpaSpeakerEmbedder(settings.diarization_model)
-                embedder.load()
-                diarization = DiarizationTimeline(OnlineDiarizer(embedder))
+            log_event("model_check", model_ok=True)
             if self._cancel.is_set():
                 return
             folder = local_directory(settings.export_dir)
@@ -161,35 +156,35 @@ class DesktopController:
                 "started_at_utc": datetime.now(timezone.utc).isoformat(),
                 "audio_saved": False, "video_saved": False, "cloud_stt": False,
                 "speaker_ids": "local_only_not_zoom_ids", "microphone_enabled": settings.use_microphone,
-                "voice_clustering_enabled": settings.use_diarization,
-                "zoom_name_mode": settings.zoom_name_mode if settings.read_zoom_names else "disabled",
-                "attribution_note": "UI active-speaker hints are uncertain; overlapping voices cannot be separated.",
+                "speaker_names": "zoom_ocr" if settings.zoom_ocr_region else "unconfirmed",
+                "attribution_note": "Display names observed during remote audio capture.",
             }.items():
                 self.store.set_metadata(key, value)
-            # OCR polls every 750 ms. Cover the unobserved interval preceding
-            # a detected switch; Zoom's own display delay remains uncertain.
-            timeline = Timeline(guard_ms=1000 if settings.zoom_name_mode == "ocr" else 300)
-            segmenter = DesktopSegmenter(timeline, local_name=settings.local_name, diarization=diarization)
+            timeline = Timeline()
+            segmenter = DesktopSegmenter(timeline, local_name=settings.local_name)
             self.pipeline = Pipeline(self.store, engine, self._pipeline_event, origin_ms=origin,
-                                     max_pending_seconds=24, segmenter=segmenter,
-                                     window_analyzer=diarization.analyze_window if diarization else None)
+                                     max_pending_seconds=24, segmenter=segmenter)
             self.pipeline.start()
             epoch = "desktop:" + uuid4().hex
 
             def audio(source, pcm, timestamp_ms, rate):
                 import numpy as np
                 values = np.frombuffer(pcm, dtype="<i2")
+                timeline.add_audio(source, timestamp_ms, values, rate)
                 self._levels[source] = min(1.0, float(np.max(np.abs(values.astype(np.float32)))) / 32768) if len(values) else 0.0
                 name = settings.local_name if source == "microphone" else "Удалённые участники"
                 self.pipeline.feed(AudioPacket("local:" + source, name, timestamp_ms, pcm, rate, epoch))
 
-            if settings.read_zoom_names:
-                if self.observer_factory:
-                    self.observer = self.observer_factory()
-                else:
-                    self.observer = ZoomSpeakerObserver(
-                        visual_config=settings.visual_config() if settings.zoom_name_mode == "ocr" else None)
+            if settings.zoom_ocr_region or self.observer_factory:
+                self.observer = (self.observer_factory() if self.observer_factory else
+                                 ZoomSpeakerObserver(visual_config=settings.visual_config(),
+                                                     verbose=settings.verbose_logging))
                 self.observer.start()
+            else:
+                self.emit("speaker", {"name": None, "evidence": "ocr_not_calibrated"})
+            log_event("capture_start", device_index=loopback_device, source="remote")
+            if settings.use_microphone:
+                log_event("device_selected", device_index=microphone_device, source="microphone")
             self.capture = (self.capture_factory or DesktopCapture)(
                 loopback_device=loopback_device,
                 microphone_device=microphone_device if settings.use_microphone else None,
@@ -203,7 +198,10 @@ class DesktopController:
                     if observation != last_observation:
                         timeline.add(observation)
                         last_observation = observation
-                    self.emit("speaker", {"name": observation.display_name, "evidence": observation.evidence})
+                    audible = timeline.remote_active_now()
+                    self.emit("speaker", {"name": observation.display_name if audible else None,
+                                          "evidence": ("audio_silence" if observation.display_name and not audible
+                                                       else observation.evidence)})
                 self.emit("levels", dict(self._levels))
                 if self.pipeline.failure:
                     self.failure = self.pipeline.failure
@@ -212,6 +210,7 @@ class DesktopController:
                     self.failure = self.failure or "Захват звука прекратился. Проверьте выбранное устройство и запустите новый сеанс."
                     break
         except Exception as error:
+            log_exception("session_error", error)
             self.failure = (str(error) if isinstance(error, (ValueError, EngineError, OSError, RuntimeError))
                             else f"Не удалось запустить локальный режим ({type(error).__name__}).")
             self.emit("error", {"message": self.failure})
@@ -240,8 +239,9 @@ class DesktopController:
             finally:
                 if self.pipeline:
                     self.pipeline.transcriber = None
-                    self.pipeline.segmenter = self.pipeline.window_analyzer = None
+                    self.pipeline.segmenter = None
             self.capture = self.observer = None
+            log_event("capture_stop")
             engine = None
             message = ("Запуск отменён до захвата звука." if self.store is None else
                        "Сеанс завершён с пропусками. Сохранённый текст доступен экспорту." if self.partial else

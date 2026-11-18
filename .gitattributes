@@ -1,3 +1,6 @@
 # Model metadata and license files are checksum-pinned byte artifacts.
 # Never rewrite their line endings in Windows checkouts or ZIP preparation.
 assets/** -text
+
+gigaam_zoom/build_revision.py export-subst
+*.cmd text eol=crlf

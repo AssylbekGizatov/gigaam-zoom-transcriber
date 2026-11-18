@@ -7,9 +7,12 @@ from types import SimpleNamespace
 import pytest
 
 from gigaam_zoom import zoom_visual as module
+from gigaam_zoom import zoom_window
+from gigaam_zoom.zoom_window import MeetingWindow
 from gigaam_zoom.zoom_visual import (
     NameStabilizer, VisualProbeError, VisualSpeakerConfig, WindowsOcr,
-    parse_ocr_name, region_bounds,
+    parse_ocr_name, parse_ocr_decision, region_bounds, VisualSampler, OcrReading,
+    adaptive_max_age_ms, preferred_ocr_language,
 )
 
 
@@ -72,8 +75,10 @@ def test_invalid_regions_rejected(region):
 def test_geometry_handles_negative_monitor_origin_and_window_resize():
     config = VisualSpeakerConfig((.1, .8, .3, .1), client_size=(1000, 500))
     assert region_bounds((-1500, 100, -500, 600), config) == (-1400, 500, -1100, 550)
+    assert region_bounds((-1500, 100, 500, 1100), config) == (-1300, 900, -700, 1000)
+    assert region_bounds((-1500, 100, -400, 600), config) == (-1390, 500, -1060, 550)
     with pytest.raises(VisualProbeError, match="ocr_recalibration_required"):
-        region_bounds((-1500, 100, -400, 600), config)
+        region_bounds((-1500, 100, -200, 600), config)
     with pytest.raises(VisualProbeError, match="ocr_region_too_small"):
         region_bounds((0, 0, 100, 100), VisualSpeakerConfig((0, 0, .01, .01)))
 
@@ -83,10 +88,11 @@ def test_capture_closes_image_when_window_changes(monkeypatch):
     from PIL import ImageGrab
     closed = []
     fake_image = SimpleNamespace(close=lambda: closed.append(True))
-    positions = iter([(1, (0, 0, 1000, 500)), (1, (10, 0, 1010, 500))])
-    monkeypatch.setattr(module, "_physical_pixels", nullcontext)
-    monkeypatch.setattr(module, "meeting_client_bounds", lambda: next(positions))
-    monkeypatch.setattr(module, "_check_uncovered", lambda *args: None)
+    positions = iter([MeetingWindow(1, 2, "Zoom Meeting", "class", (0, 0, 1000, 500), "monitor1", 96),
+                      MeetingWindow(1, 2, "Zoom Meeting", "class", (10, 0, 1010, 500), "monitor1", 96)])
+    monkeypatch.setattr(zoom_window, "physical_pixels", nullcontext)
+    monkeypatch.setattr(zoom_window, "find_meeting_window", lambda: next(positions))
+    monkeypatch.setattr(zoom_window, "ensure_region_uncovered", lambda *args: None)
     monkeypatch.setattr(ImageGrab, "grab", lambda **kwargs: fake_image)
     with pytest.raises(VisualProbeError, match="ocr_window_changed"):
         module._capture(VisualSpeakerConfig((0, 0, .5, .1)))
@@ -172,15 +178,17 @@ def test_worker_invalidates_confirmed_name_after_capture_failure(monkeypatch):
         at_ms = next(times)
         clock[0] = at_ms
         if at_ms == 2000:
-            raise VisualProbeError("ocr_window_not_foreground")
-        return SimpleNamespace(close=lambda: None), (0, 0, 100, 100), at_ms
+            raise VisualProbeError("ocr_region_occluded")
+        return (SimpleNamespace(close=lambda: None, size=(100, 20)),
+                MeetingWindow(1, 2, "Zoom Meeting", "class", (0, 0, 100, 100), "monitor1", 96),
+                (0, 0, 100, 20), at_ms)
 
     class Reader:
         def __init__(self, language):
-            pass
+            self.language = language
 
-        async def recognize(self, image):
-            return ["Alice"]
+        async def recognize_details(self, image):
+            return OcrReading(("Alice",), 1)
 
         def close(self):
             pass
@@ -189,11 +197,155 @@ def test_worker_invalidates_confirmed_name_after_capture_failure(monkeypatch):
     monkeypatch.setattr(module, "_capture", capture)
     monkeypatch.setattr(module, "monotonic_ms", lambda: clock[0])
     monkeypatch.setattr(module, "WindowsOcr", Reader)
+    monkeypatch.setattr(module, "_blank_image", lambda image: False)
     connection = Connection()
     module._visual_worker(connection, "session", VisualSpeakerConfig((0, 0, .5, .1)))
-    assert [r.display_name for r in connection.results] == [None, "Alice", None, None, "Alice"]
-    assert connection.results[2].evidence == "ocr_window_not_foreground"
+    assert [r.observation.display_name for r in connection.results] == [None, "Alice", None, None, "Alice"]
+    assert connection.results[2].observation.evidence == "ocr_region_occluded"
     assert connection.closed
+
+
+@pytest.mark.parametrize("lines,expected", [
+    (["Иван Петров (Организатор)"], "Иван Петров"),
+    (["Mute Alice (Host)"], "Alice"), (["Alice", "Mute"], "Alice"),
+    (["Участники", "Әлия"], "Әлия"),
+])
+def test_parser_removes_exact_zoom_chrome_before_name_decision(lines, expected):
+    assert parse_ocr_decision(lines) == (expected, "accepted")
+
+
+def test_parser_reports_ambiguity_and_rejection_reasons():
+    assert parse_ocr_decision(["Alice", "Bob"])[1] == "ocr_name_ambiguous"
+    assert parse_ocr_decision(["Mute", "Chat"])[1] == "ocr_name_ui_only"
+    assert parse_ocr_decision(["Иван…"])[1] == "ocr_name_clipped"
+    assert parse_ocr_decision(["Recording", "Запись"])[1] == "ocr_name_ui_only"
+    assert parse_ocr_decision(["12345"])[1] == "ocr_name_no_letters"
+
+
+def test_freshness_budget_is_adaptive_and_bounded():
+    assert adaptive_max_age_ms(50) == 2000
+    assert adaptive_max_age_ms(2500) == 6500
+    assert adaptive_max_age_ms(20000) == 10000
+    assert adaptive_max_age_ms(float("nan")) == 2000
+
+
+def test_installed_language_preference():
+    assert preferred_ocr_language(["en-US", "ru"]) == "ru"
+    assert preferred_ocr_language([]) == ""
+    assert preferred_ocr_language(["en-US", "ru-RU"]) == "ru-RU"
+    assert preferred_ocr_language(["de-DE", "en-US"]) == "en-US"
+    assert preferred_ocr_language(["de-DE"]) == "de-DE"
+
+
+def _sampler_fixture(monkeypatch, *, blank=False, latency=2500, clipped=False):
+    Image = pytest.importorskip("PIL.Image")
+    clock = [1000]
+    window = [MeetingWindow(1, 2, "Zoom Meeting", "class", (0, 0, 1000, 500), "monitor1", 96)]
+    calls = []
+
+    def capture(config):
+        crop = region_bounds(window[0].client_bounds, config)
+        image = Image.new("RGB", (crop[2] - crop[0], crop[3] - crop[1]), "black")
+        if not blank:
+            for x in range(20, 80):
+                image.putpixel((x, 12), (255, 255, 255))
+        return image, window[0], crop, clock[0]
+
+    class Reader:
+        def __init__(self, language):
+            self.language = language
+            calls.append("init")
+
+        async def recognize_details(self, image):
+            clock[0] += latency
+            return OcrReading(("Mute Alice (Host)",), 3, clipped=clipped)
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(module, "_capture", capture)
+    monkeypatch.setattr(module, "monotonic_ms", lambda: clock[0])
+    monkeypatch.setattr(module, "WindowsOcr", Reader)
+    return clock, window, calls
+
+
+def test_slow_frames_keep_capture_time_and_confirm_with_adaptive_age(monkeypatch):
+    clock, _, calls = _sampler_fixture(monkeypatch)
+    sampler = VisualSampler(VisualSpeakerConfig((0, 0, .5, .1)), "session")
+    try:
+        first = sampler.sample()
+        assert first.observation.observed_at_ms == 1000
+        assert first.observation.evidence == "ocr_confirming"
+        assert first.max_age_ms == 6500
+        assert first.raw_lines == () and first.image_png is None
+        clock[0] += 500
+        second = sampler.sample(include_image=True, include_raw_text=True)
+        assert second.observation.display_name == "Alice"
+        assert second.observation.observed_at_ms == 4000
+        assert second.raw_lines == ("Mute Alice (Host)",)
+        assert second.parser_reason == "accepted"
+        assert second.line_count == 1 and second.word_count == 3
+        assert second.image_png.startswith(b"\x89PNG")
+        assert second.window["dpi"] == 96
+        assert "image_png" not in second.diagnostic_dict()
+    finally:
+        sampler.close()
+    assert calls == ["init", "close"]
+
+
+def test_uniform_capture_is_distinct_from_ocr_no_text(monkeypatch):
+    _, _, calls = _sampler_fixture(monkeypatch, blank=True)
+    sampler = VisualSampler(VisualSpeakerConfig((0, 0, .5, .1)), "session")
+    try:
+        result = sampler.sample(include_image=True)
+        assert result.observation.evidence == "ocr_capture_blank"
+        assert result.image_png is not None
+        assert result.line_count == 0
+        assert calls == []  # No OCR model invocation for an empty capture.
+    finally:
+        sampler.close()
+
+
+def test_clipped_full_frame_debug_keeps_unfiltered_lines_and_parser_reason(monkeypatch):
+    _sampler_fixture(monkeypatch, clipped=True)
+    sampler = VisualSampler(VisualSpeakerConfig((0, 0, 1, 1), dump_ocr_text=True), "session")
+    try:
+        result = sampler.sample()
+        assert result.observation.evidence == "ocr_name_clipped"
+        assert result.raw_lines == ("Mute Alice (Host)",)
+        assert result.parser_reason == "ocr_name_clipped"
+        assert result.line_count == 1 and result.word_count == 3
+    finally:
+        sampler.close()
+
+
+def test_sampler_recomputes_normalized_roi_for_resize_monitor_dpi_and_recreated_window(monkeypatch):
+    clock, window, _ = _sampler_fixture(monkeypatch, latency=50)
+    sampler = VisualSampler(VisualSpeakerConfig((0, 0, .5, .1), client_size=(1000, 500)), "session")
+    try:
+        sampler.sample()
+        clock[0] += 750
+        window[0] = MeetingWindow(1, 2, "Zoom Meeting", "class", (100, 0, 1100, 500), "monitor1", 96)
+        assert sampler.sample().observation.display_name == "Alice"  # Move within same monitor.
+        for changed in (
+            MeetingWindow(1, 2, "Zoom Meeting", "class", (100, 0, 1600, 750), "monitor2", 144),
+            MeetingWindow(1, 2, "Zoom Meeting", "class", (-1000, 0, 100, 500), "monitor1", 96),
+            MeetingWindow(9, 3, "Zoom Meeting", "class", (-1000, 0, 100, 500), "monitor1", 96),
+        ):
+            clock[0] += 750
+            window[0] = changed
+            transition = sampler.sample()
+            assert transition.observation.evidence == "ocr_confirming"
+            assert transition.crop_bounds == region_bounds(changed.client_bounds, sampler.config)
+            crop = transition.crop_bounds
+            assert transition.image_size == (crop[2] - crop[0], crop[3] - crop[1])
+            clock[0] += 750
+            assert sampler.sample().observation.display_name == "Alice"
+        window[0] = MeetingWindow(9, 3, "Zoom Meeting", "class", (0, 0, 1600, 500), "monitor1", 96)
+        assert sampler.sample().observation.evidence == "ocr_recalibration_required"
+    finally:
+        sampler.close()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows OCR integration requires Windows")

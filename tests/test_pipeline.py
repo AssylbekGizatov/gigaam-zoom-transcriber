@@ -61,19 +61,6 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.store.get_metadata("time_basis"), "meeting")
         self.assertTrue(all(s.status == "final" and s.end > s.start for s in segments))
 
-    def test_rename_leave_and_rejoin_snapshot_names_without_voice_guessing(self):
-        pipeline = self.make()
-        pipeline.feed(packet(name="Имя до", ms=10000))
-        pipeline.participant_event("42", "Имя после", "rename", "connection-1", 10500)
-        pipeline.feed(packet(name=None, ms=10500))
-        pipeline.participant_event("42", None, "participant_left", "connection-1", 11000)
-        pipeline.participant_event("42", "После входа", "participant_joined", "connection-2", 12000)
-        pipeline.feed(packet(name=None, ms=12000, epoch="connection-2"))
-        pipeline.stop()
-        segments = list(self.store.iter_segments())
-        self.assertEqual([s.display_name for s in segments], ["Имя до", "Имя после", "После входа"])
-        self.assertEqual([s.source_epoch for s in segments], ["connection-1", "connection-1", "connection-2"])
-
     def test_reconnect_generation_does_not_inherit_old_name_or_deduplicate_other_source(self):
         pipeline = self.make()
         self.assertTrue(pipeline.feed(packet(name="Старое имя")))
@@ -93,15 +80,6 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.store.get_metadata("time_basis"), "first_audio")
         self.assertAlmostEqual(list(self.store.iter_segments())[0].start, .05)
 
-    def test_official_origin_must_precede_audio_and_cannot_rebase_finalized_data(self):
-        pipeline = self.make(origin=None)
-        pipeline.set_origin(9000)
-        pipeline.feed(packet())
-        with self.assertRaises(ValueError):
-            pipeline.set_origin(8000)
-        pipeline.stop()
-        self.assertAlmostEqual(list(self.store.iter_segments())[0].start, 1.05)
-
     def test_silence_and_idle_flush_finish_partial_audio(self):
         pipeline = self.make(idle_timeout_seconds=.05)
         pipeline.feed(packet(value=0))
@@ -109,7 +87,7 @@ class PipelineTests(unittest.TestCase):
         deadline = time.monotonic() + 2
         while not self.store.recent() and time.monotonic() < deadline:
             time.sleep(.01)
-        self.assertTrue(self.store.recent(), "worker did not finalize on RTMS silence/inactivity")
+        self.assertTrue(self.store.recent(), "worker did not finalize on silence/inactivity")
         pipeline.feed(packet(ms=11000, seconds=1.3, value=0))
         pipeline.stop()
         self.assertEqual(len(self.store.recent()), 1)
@@ -229,15 +207,6 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(all(not pipeline.feed(p) for p in invalid))
         pipeline.stop()
         self.assertFalse(self.store.recent())
-
-    def test_many_participant_incarnations_do_not_accumulate_in_memory(self):
-        pipeline = self.make()
-        for i in range(200):
-            user = str(i)
-            self.assertTrue(pipeline.feed(packet(user=user, value=0)))
-            pipeline.participant_event(user, None, "left", "connection-1")
-        self.assertEqual(pipeline.metrics["active_sources"], 0)
-        self.assertEqual(pipeline.pending_seconds, 0)
 
     def test_full_disk_does_not_kill_worker_or_report_successful_drain(self):
         pipeline = self.make()

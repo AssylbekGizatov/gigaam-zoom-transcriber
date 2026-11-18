@@ -1,4 +1,4 @@
-name: Tests and publication guard
+name: Desktop tests and publication guard
 on: [push, pull_request]
 permissions:
   contents: read
@@ -16,12 +16,11 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
       - run: python -m pip install -r requirements-dev.txt -c constraints.txt
-      - name: Import native Windows adapters without opening audio devices
+      - name: Import native Windows adapters without opening devices
         if: runner.os == 'Windows'
         run: |
-          python -m pip install PyAudioWPatch==0.2.12.8 comtypes==1.4.13 -c constraints.txt
-          python -m pip install -r requirements-zoom-ocr.txt
-          python -c "import pyaudiowpatch, comtypes"
+          python -m pip install PyAudioWPatch==0.2.12.8 winrt-runtime==3.2.1 winrt-Windows.Foundation==3.2.1 winrt-Windows.Foundation.Collections==3.2.1 winrt-Windows.Globalization==3.2.1 winrt-Windows.Media.Ocr==3.2.1 winrt-Windows.Graphics.Imaging==3.2.1 winrt-Windows.Storage.Streams==3.2.1 -c constraints.txt
+          python -c "import pyaudiowpatch, winrt.windows.media.ocr, winrt.windows.graphics.imaging"
       - run: python scripts/check_publication.py
       - run: python -m pytest -q --junitxml=test-results.xml
       - uses: actions/upload-artifact@v4
@@ -40,26 +39,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
           cache: pip
-      - name: Create isolated environment like user setup
-        shell: python
+      - name: Install the same CPU runtime as the Windows user
         run: |
-          import os, pathlib, subprocess, sys
-          subprocess.run([sys.executable, "-m", "venv", ".venv-ci"], check=True)
-          scripts = pathlib.Path(".venv-ci") / ("Scripts" if os.name == "nt" else "bin")
-          with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as output:
-              output.write(str(scripts.resolve()) + "\n")
-      - name: Install CPU runtime from bundled GigaAM source
-        run: |
-          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.10.0+cpu torchaudio==2.10.0+cpu -c constraints.txt
-          python -m pip install -r requirements-desktop.txt -c constraints.txt
+          python -m pip install --user -r requirements-desktop.txt
           python -m pip check
-      - name: Acquire pinned models from this repository release only
+      - name: Acquire pinned GigaAM weights from this repository only
         run: |
           python scripts/acquire_model.py
-          python scripts/download_diarization.py
           python scripts/acquire_model.py --check
-          python scripts/download_diarization.py --check
       - name: Load and infer with Python network connections blocked
         run: python scripts/verify_offline_runtime.py

@@ -1,7 +1,7 @@
 """Maintainer-only GitHub release staging. Not used by application/setup.
 
 Only this publishing tool fetches original upstream model URLs. Corporate
-clients use acquire_model.py / download_diarization.py and the GitHub mirror.
+clients use acquire_model.py and the GitHub mirror.
 """
 from __future__ import annotations
 
@@ -41,21 +41,19 @@ def stage(directory: Path):
                 raise RuntimeError(f"Existing staged asset mismatch: {name}")
         print(f"Verified {name}: {spec['bytes']} bytes", flush=True)
     for source, name in [
-        ("assets/model-manifest.json", "model-manifest.json"),
+        ("assets/model-manifest.json", "model-manifest-gigaam.json"),
         ("assets/gigaam/config.json", "config.json"),
         ("assets/gigaam/README.md", "GigaAM-MODEL-CARD.md"),
         ("assets/gigaam/LICENSE", "GigaAM-LICENSE.txt"),
-        ("assets/licenses/Apache-2.0.txt", "Apache-2.0.txt"),
-        ("assets/licenses/CC-BY-4.0.txt", "CC-BY-4.0.txt"),
-        ("assets/README.md", "MODEL-NOTICES.md"),
+        ("assets/README.md", "GIGAAM-NOTICES.md"),
     ]:
         shutil.copyfile(ROOT / source, directory / name)
     sums = []
     for path in sorted(directory.iterdir()):
-        if path.is_file() and path.name != "SHA256SUMS.txt":
+        if path.is_file() and path.name != "GIGAAM-SHA256SUMS.txt":
             with path.open("rb") as source:
                 sums.append(f"{hashlib.file_digest(source, 'sha256').hexdigest()}  {path.name}\n")
-    (directory / "SHA256SUMS.txt").write_text("".join(sums), encoding="utf-8")
+    (directory / "GIGAAM-SHA256SUMS.txt").write_text("".join(sums), encoding="utf-8")
 
 
 if __name__ == "__main__":
