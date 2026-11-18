@@ -382,7 +382,7 @@ class VisualSampler:
             finally:
                 timings["capture_ms"] = round((time.perf_counter() - capture_started) * 1000, 3)
             window_info = {
-                "hwnd": window.hwnd, "pid": window.pid, "title": window.title,
+                "hwnd": window.hwnd, "pid": window.pid,
                 "class_name": window.class_name, "client_rect": window.client_bounds,
                 "monitor": window.monitor_id, "dpi": window.dpi,
             }

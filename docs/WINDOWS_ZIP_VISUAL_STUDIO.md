@@ -106,3 +106,21 @@ py -3.13 scripts\acquire_model.py
 версии через тот же системный Python согласно её документации. Не заменяйте
 и не удаляйте веса и результаты ради отката. Старая версия может не понимать
 новые настройки — восстановите их сохранённую копию; документы SQLite храните.
+
+Для отката именно этого обновления сохраните настройки **до первого запуска**.
+В CMD, если файл уже существует:
+
+```bat
+if exist "%LOCALAPPDATA%\GigaAMZoom\desktop-settings.json" copy /Y "%LOCALAPPDATA%\GigaAMZoom\desktop-settings.json" "%LOCALAPPDATA%\GigaAMZoom\desktop-settings.before-ocr.json"
+```
+
+Закройте приложение, распакуйте [стартовую версию ветки](https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/archive/5e7a4baed99385c077fa976cd25d220aa15c7020.zip)
+в отдельную папку. Из этой папки:
+
+```bat
+if exist "%LOCALAPPDATA%\GigaAMZoom\desktop-settings.before-ocr.json" copy /Y "%LOCALAPPDATA%\GigaAMZoom\desktop-settings.before-ocr.json" "%LOCALAPPDATA%\GigaAMZoom\desktop-settings.json"
+py -3.13 -m pip install --user -r requirements-desktop.txt -r requirements-zoom-ocr.txt -c constraints.txt
+py -3.13 app.py
+```
+
+При необходимости снова выберите прежние папки модели и текста.

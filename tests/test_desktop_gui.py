@@ -69,6 +69,25 @@ class DesktopGuiTests(unittest.TestCase):
             calibrate.call_args.args[1](None, None)
         self.assertFalse(app.busy)
 
+    def test_settings_preserve_export_geometry_and_device_names_without_indices(self):
+        app = self.application()
+        app.root = types.SimpleNamespace(geometry=lambda: "1100x660+120+40")
+        for key, value in {"model": "models/gigaam", "folder": "transcripts", "name": "Алия",
+                           "microphone": True, "ocr_region": ".1,.8,.3,.1", "ocr_language": "ru-RU",
+                           "ocr_client_size": "1280,720", "verbose": False, "format": "PDF",
+                           "loopback": "7: Headphones", "mic_device": "2: Microphone"}.items():
+            setattr(app, key, Value(value))
+        app.first_run_complete = True
+        app.saved_loopback = app.saved_microphone = ""
+        app.devices = [types.SimpleNamespace(index=7, name="Headphones", kind="loopback"),
+                       types.SimpleNamespace(index=2, name="Microphone", kind="microphone")]
+        settings = app.settings()
+        self.assertEqual(settings.loopback_name, "Headphones")
+        self.assertEqual(settings.microphone_name, "Microphone")
+        self.assertEqual(settings.export_format, "PDF")
+        self.assertEqual(settings.window_geometry, "1100x660+120+40")
+        self.assertTrue(settings.first_run_complete)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -80,8 +80,13 @@ def parse_args(argv=None):
 
 
 def _print_json(value):
-    # ASCII escapes also work in corporate terminals using legacy code pages.
-    print(json.dumps(value, ensure_ascii=True), flush=True)
+    # Windows consoles support Unicode. Escape only unsupported characters
+    # when a diagnostic is redirected to a legacy code page.
+    line = json.dumps(value, ensure_ascii=False)
+    try:
+        print(line, flush=True)
+    except UnicodeEncodeError:
+        print(json.dumps(value, ensure_ascii=True), flush=True)
 
 
 def _installed_languages():

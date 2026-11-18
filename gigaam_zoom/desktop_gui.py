@@ -74,7 +74,8 @@ class DesktopApplication:
         self.snapshot_busy = False
         try:
             config = DesktopSettings.load()
-        except (ValueError, OSError):
+        except (ValueError, OSError) as error:
+            log_exception("settings_load_failed", error)
             config = DesktopSettings()
         self.model = tk.StringVar(value=config.model_dir)
         self.folder = tk.StringVar(value=config.export_dir)
@@ -104,7 +105,7 @@ class DesktopApplication:
         self.status = tk.StringVar(value="Откройте встречу в Zoom, выберите звук и нажмите «Начать».")
         self.speaker = tk.StringVar(value="Имя говорящего: ещё не проверено")
         self.metrics = tk.StringVar(value="Аудио и видео не сохраняются · модель работает локально")
-        self.format = tk.StringVar(value=config.export_format)
+        self.format = tk.StringVar(value=config.export_format if config.export_format in {"DOCX", "PDF", "TXT"} else "DOCX")
         self._build()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll)
@@ -465,7 +466,11 @@ class DesktopApplication:
             if self.onboarding and self.onboarding.winfo_exists():
                 self.onboarding.deiconify()
             finished(region, client_size)
-        begin_calibration(self.root, calibration_done, language=self.ocr_language.get())
+        try:
+            begin_calibration(self.root, calibration_done, language=self.ocr_language.get() or "auto")
+        except Exception as error:
+            calibration_done(None, None)
+            self.show_failure(error, "Не удалось выбрать область имени")
 
     def save(self):
         settings = self.settings()
@@ -482,6 +487,7 @@ class DesktopApplication:
             if output is None:
                 raise ValueError("Выберите выход звука Zoom.")
             self.controller.start(config, output, mic)
+            self.toggle_settings(False)
             self.status.set("Загрузка модели…")
             self.table.delete(*self.table.get_children())
             self.dirty = True
@@ -638,6 +644,7 @@ class DesktopApplication:
         self.refresh_button.configure(state="disabled" if running or self.busy else "normal")
         self.calibrate_button.configure(state="disabled" if running or self.busy else "normal")
         self.download_button.configure(state="disabled" if running or self.busy else "normal")
+        self.settings_toggle.configure(state="disabled" if running else "normal")
         self.language_combo.configure(state="disabled" if running else "readonly")
         if self.dirty and self.controller.store and not self.busy and not self.snapshot_busy:
             self.snapshot_busy = True
