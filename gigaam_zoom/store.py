@@ -104,7 +104,7 @@ class Store:
 
     append = upsert
 
-    def correct_speaker(self, segment_id: str, name: str, *, whole_source=False) -> None:
+    def correct_speaker(self, segment_id: str, name: str) -> None:
         """Explicit user correction; preserve text and timestamp, retain audit event."""
         name = name.strip()
         if not name or len(name) > 150 or any(ord(c) < 32 for c in name):
@@ -113,14 +113,9 @@ class Store:
             row = self._db.execute("SELECT speaker_id,display_name,source_epoch FROM segments WHERE id=?", (segment_id,)).fetchone()
             if not row:
                 raise ValueError("Реплика не найдена.")
-            if whole_source:
-                if not row[0].startswith("local:voice:"):
-                    raise ValueError("Подписать весь голос можно только для источника «по голосу». Смешанный звук может содержать разных людей.")
-                self._db.execute("UPDATE segments SET display_name=?,attribution='manual' WHERE speaker_id=? AND source_epoch=?", (name, row[0], row[2]))
-            else:
-                self._db.execute("UPDATE segments SET display_name=?,attribution='manual' WHERE id=?", (name, segment_id))
+            self._db.execute("UPDATE segments SET display_name=?,attribution='manual' WHERE id=?", (name, segment_id))
             self._db.execute("INSERT INTO participant_events(user_id,display_name,event,source_epoch) VALUES (?,?,?,?)",
-                             (row[0], name, ("manual_source_correction:" if whole_source else "manual_correction:") + segment_id, row[2]))
+                             (row[0], name, "manual_correction:" + segment_id, row[2]))
 
     @staticmethod
     def _segment(row) -> Segment:

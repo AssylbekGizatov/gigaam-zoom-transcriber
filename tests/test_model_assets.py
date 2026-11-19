@@ -9,7 +9,6 @@ import pytest
 
 from gigaam_zoom import model_assets as assets
 from gigaam_zoom.engine import MODEL_FILES
-from gigaam_zoom.diarization import SPEAKER_MODELS
 
 
 def digest(data):
@@ -33,11 +32,6 @@ def no_network(*args, **kwargs):
 def test_release_urls_and_runtime_pins_match():
     record = assets.manifest()
     assert record["artifacts"]["pytorch_model.bin"]["sha256"] == MODEL_FILES["pytorch_model.bin"]
-    for spec in SPEAKER_MODELS.values():
-        artifact = record["artifacts"][spec.filename]
-        assert artifact["sha256"] == spec.sha256
-        assert artifact["bytes"] == spec.size_bytes
-        assert spec.url == assets.release_url(spec.filename)
     for name in record["artifacts"]:
         assert assets.release_url(name).startswith(
             "https://github.com/AssylbekGizatov/gigaam-zoom-transcriber/releases/download/models-v1/")
@@ -122,8 +116,8 @@ def test_local_copy_checks_source(tmp_path, monkeypatch, tiny_manifest):
 
 
 def test_downloader_cli_works_without_installed_packages_or_git(tmp_path):
-    # -S disables site-packages: both commands must need only the standard library.
-    for script in ("acquire_model.py", "download_diarization.py"):
+    # -S disables site-packages: the command must need only the standard library.
+    for script in ("acquire_model.py",):
         result = subprocess.run([sys.executable, "-S", str(assets.ROOT / "scripts" / script), "--help"],
                                 cwd=tmp_path, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
@@ -132,7 +126,7 @@ def test_downloader_cli_works_without_installed_packages_or_git(tmp_path):
 
 
 def test_no_git_or_hub_dependency_in_asr_requirements():
-    requirements = (assets.ROOT / "requirements-asr.txt").read_text(encoding="utf-8")
+    requirements = (assets.ROOT / "requirements-desktop.txt").read_text(encoding="utf-8")
     assert "./vendor/gigaam" in requirements
     assert "git+" not in requirements
     import tomllib

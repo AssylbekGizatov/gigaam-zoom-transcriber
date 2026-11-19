@@ -1,0 +1,181 @@
+{
+  "checked_at": "2026-11-18",
+  "scope": "pip dependency resolution for CPython 3.13 Windows x64; not native Windows execution",
+  "target": {
+    "platform": "win_amd64",
+    "python": "3.13",
+    "implementation": "cp",
+    "abi": "cp313"
+  },
+  "source_requirements": "requirements-desktop.txt",
+  "source_constraints": "constraints.txt",
+  "method": "Windows top-level platform markers expanded on Linux; bundled GigaAM and pure-Python ANTLR 4.9.3 wheels built locally; pip --dry-run --ignore-installed --only-binary=:all: with target tags and local --find-links",
+  "success": true,
+  "packages": [
+    {
+      "name": "torch",
+      "version": "2.10.0+cpu",
+      "wheel": "torch-2.10.0+cpu-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "torchaudio",
+      "version": "2.10.0+cpu",
+      "wheel": "torchaudio-2.10.0+cpu-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "gigaam",
+      "version": "0.2.0+offline.1",
+      "wheel": "gigaam-0.2.0+offline.1-py3-none-any.whl"
+    },
+    {
+      "name": "numpy",
+      "version": "2.2.6",
+      "wheel": "numpy-2.2.6-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "psutil",
+      "version": "7.0.0",
+      "wheel": "psutil-7.0.0-cp37-abi3-win_amd64.whl"
+    },
+    {
+      "name": "python-docx",
+      "version": "1.2.0",
+      "wheel": "python_docx-1.2.0-py3-none-any.whl"
+    },
+    {
+      "name": "reportlab",
+      "version": "4.4.9",
+      "wheel": "reportlab-4.4.9-py3-none-any.whl"
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0",
+      "wheel": "pillow-12.3.0-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "lxml",
+      "version": "6.1.3",
+      "wheel": "lxml-6.1.3-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "wheel": "typing_extensions-4.16.0-py3-none-any.whl"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "wheel": "charset_normalizer-3.5.2-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "PyAudioWPatch",
+      "version": "0.2.12.8",
+      "wheel": "pyaudiowpatch-0.2.12.8-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-runtime",
+      "version": "3.2.1",
+      "wheel": "winrt_runtime-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-Windows.Foundation",
+      "version": "3.2.1",
+      "wheel": "winrt_windows_foundation-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-Windows.Foundation.Collections",
+      "version": "3.2.1",
+      "wheel": "winrt_windows_foundation_collections-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-Windows.Globalization",
+      "version": "3.2.1",
+      "wheel": "winrt_windows_globalization-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-Windows.Media.Ocr",
+      "version": "3.2.1",
+      "wheel": "winrt_windows_media_ocr-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-Windows.Graphics.Imaging",
+      "version": "3.2.1",
+      "wheel": "winrt_windows_graphics_imaging-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "winrt-Windows.Storage.Streams",
+      "version": "3.2.1",
+      "wheel": "winrt_windows_storage_streams-3.2.1-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "hydra-core",
+      "version": "1.3.7",
+      "wheel": "hydra_core-1.3.7-py3-none-any.whl"
+    },
+    {
+      "name": "antlr4-python3-runtime",
+      "version": "4.9.3",
+      "wheel": "antlr4_python3_runtime-4.9.3-py3-none-any.whl"
+    },
+    {
+      "name": "omegaconf",
+      "version": "2.3.1",
+      "wheel": "omegaconf-2.3.1-py3-none-any.whl"
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.7.0",
+      "wheel": "fsspec-2026.7.0-py3-none-any.whl"
+    },
+    {
+      "name": "networkx",
+      "version": "3.6.1",
+      "wheel": "networkx-3.6.1-py3-none-any.whl"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "wheel": "pyyaml-6.0.3-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0",
+      "wheel": "sympy-1.14.0-py3-none-any.whl"
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "wheel": "mpmath-1.3.0-py3-none-any.whl"
+    },
+    {
+      "name": "filelock",
+      "version": "3.32.3",
+      "wheel": "filelock-3.32.3-py3-none-any.whl"
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "wheel": "jinja2-3.1.6-py3-none-any.whl"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "wheel": "markupsafe-3.0.3-cp313-cp313-win_amd64.whl"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "wheel": "packaging-26.3-py3-none-any.whl"
+    },
+    {
+      "name": "setuptools",
+      "version": "78.1.0",
+      "wheel": "setuptools-78.1.0-py3-none-any.whl"
+    }
+  ],
+  "limitations": [
+    "No native Windows imports or hardware capture were executed.",
+    "Locally built pure-Python wheels are validation aids; user pip builds the bundled package and ANTLR from source automatically.",
+    "No model weights were downloaded for this check."
+  ]
+}

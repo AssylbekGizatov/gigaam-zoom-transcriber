@@ -123,14 +123,13 @@ def _overlap_alignment(previous, current, overlap_start):
 
 class Pipeline:
     def __init__(self, store: Store, transcriber, on_event=None, origin_ms: int | None = None,
-                 *, max_pending_seconds: float = 48.0, idle_timeout_seconds: float = 1.2, segmenter=None, window_analyzer=None):
+                 *, max_pending_seconds: float = 48.0, idle_timeout_seconds: float = 1.2, segmenter=None):
         if not math.isfinite(max_pending_seconds) or not 18 <= max_pending_seconds <= 48:
             raise ValueError("Лимит звука должен быть от 18 до 48 секунд.")
         if not .05 <= idle_timeout_seconds <= 30:
             raise ValueError("Некорректный таймаут тишины.")
         self.store, self.transcriber = store, transcriber
         self.segmenter = segmenter
-        self.window_analyzer = window_analyzer
         self.on_event = on_event or (lambda kind, payload: None)
         self.origin_ms = origin_ms if origin_ms is not None else store.get_metadata("origin_ms")
         if self.origin_ms is not None:
@@ -206,24 +205,6 @@ class Pipeline:
             self._thread = threading.Thread(target=self._run, name="gigaam-local-inference", daemon=True)
             self._thread.start()
 
-    @_storage_guard
-    def set_origin(self, timestamp_ms: int, basis: str = "meeting"):
-        """Set the official RTMS clock origin before the first audio packet.
-
-        Rebasing an active meeting would change already exported timestamps,
-        so late or conflicting origins fail explicitly.
-        """
-        if not isinstance(timestamp_ms, int) or not 0 <= timestamp_ms <= 2**53:
-            raise ValueError("Некорректное начало шкалы времени Zoom.")
-        with self._condition:
-            if self.origin_ms not in {None, timestamp_ms} and any(s.previous_end is not None for s in self._states.values()):
-                raise ValueError("Нельзя менять начало времени после получения аудио.")
-            self.origin_ms = timestamp_ms
-            self.store.set_metadata("origin_ms", timestamp_ms)
-            self.store.set_metadata("clock_origin_kind", "explicit_meeting_start" if basis == "meeting" else basis)
-            self.store.set_metadata("time_basis", basis)
-        self._emit("clock_origin", {"origin_ms": timestamp_ms, "kind": basis})
-
     @staticmethod
     def _display(user_id, name):
         return name if isinstance(name, str) and name.strip() else f"Участник Zoom #{user_id} (имя неизвестно)"
@@ -232,26 +213,6 @@ class Pipeline:
         state = self._states.pop(key)
         if state.previous_end is not None:
             self.store.set_source_cursor(key[1], key[0], state.previous_end)
-
-    @_storage_guard
-    def participant_event(self, user_id: str, name: str | None, event: str,
-                          epoch: str = "0", timestamp_ms: int | None = None):
-        if not isinstance(user_id, str) or not user_id or len(user_id) > 512 or len(epoch) > 512:
-            raise ValueError("Некорректный идентификатор Zoom.")
-        if name is not None and (not isinstance(name, str) or len(name) > 512):
-            raise ValueError("Некорректное имя Zoom.")
-        with self._condition:
-            self.store.participant_event(user_id, name, event, epoch, timestamp_ms)
-            key = (epoch, user_id)
-            state = self._states.get(key)
-            if state:
-                display = self._display(user_id, name) if name is not None else state.name
-                if display != state.name or event in {"leave", "left", "participant_left"}:
-                    self._flush_locked(key, final=True)
-                state.name = display
-                if event in {"leave", "left", "participant_left"}:
-                    self._retire_locked(key)
-        self._emit("participant", {"user_id": user_id, "user_name": name, "event": event, "epoch": epoch})
 
     def _gap(self, key, start, end, reason):
         try:
@@ -343,7 +304,7 @@ class Pipeline:
                 return False
             state.dropped = False
             offset = 0
-            # 20-ms silence decisions work equally for small RTMS packets and
+            # 20-ms silence decisions work equally for small audio packets and
             # an offline 8-second fixture packet; no volume gate drops speech.
             while offset < len(pcm):
                 size = min(round(.02 * state.rate), window_frames - state.frames, len(pcm) - offset)
@@ -429,12 +390,6 @@ class Pipeline:
                 self._inflight_seconds = window.duration
             started = perf_counter()
             try:
-                if self.window_analyzer:
-                    try:
-                        self.window_analyzer(window.key[1], window.pcm, window.rate, window.start)
-                    except Exception:
-                        self.window_analyzer = None
-                        self._emit("attribution_failed", {"message": "Разделение голосов недоступно; текст продолжает распознаваться без голосовых подписей."})
                 words = self.transcriber.transcribe_words(window.pcm, window.rate)
                 self._publish(window, words)
             except (sqlite3.Error, OSError):

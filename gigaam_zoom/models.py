@@ -1,4 +1,4 @@
-"""Immutable contracts shared by desktop/RTMS adapters, worker and exports."""
+"""Immutable contracts shared by audio adapters, worker and exports."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,7 +25,7 @@ class Word:
 @dataclass(frozen=True, slots=True)
 class Segment:
     id: str
-    speaker_id: str  # RTMS source ID or explicit local: ID; see attribution.
+    speaker_id: str  # Source identifier; see attribution.
     display_name: str
     start: float
     end: float

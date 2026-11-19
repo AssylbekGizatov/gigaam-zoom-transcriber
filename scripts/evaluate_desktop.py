@@ -38,7 +38,7 @@ def verify_exports(store, directory):
         if kind == "JSON":
             document = json.loads(path.read_text(encoding="utf-8"))
             values = document["segments"]
-            valid = len(values) == len(segments) and all(row["attribution"] in {"unattributed_mix", "voice_cluster"} for row in values)
+            valid = len(values) == len(segments) and all(row["attribution"] == "unattributed_mix" for row in values)
         else:
             if kind in {"TXT", "MD"}:
                 text = path.read_text(encoding="utf-8")
@@ -64,8 +64,6 @@ def main():
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--work-dir", required=True, type=Path)
     parser.add_argument("--model-dir", type=Path)
-    parser.add_argument("--diarization-model", type=Path,
-                        help="Optional verified CAM++/WeSpeaker ONNX; all voices still anonymous local estimates")
     args = parser.parse_args()
     if args.report.exists():
         raise FileExistsError("Choose a new report file; evidence is not overwritten")
@@ -95,9 +93,7 @@ def main():
         "live_zoom_meeting_tested": False, "microphone_tested": False,
         "zoom_speaker_names_tested": False, "simultaneous_speech_tested": False,
         "natural_code_switching_tested": False, "audio_files_written": 0,
-        "diarization_enabled": args.diarization_model is not None,
-        "speaker_attribution": ("anonymous local voice clusters + unknown; no true person names or Zoom IDs"
-                                if args.diarization_model else "unattributed_mix; no synthetic person names or fake Zoom IDs"),
+        "speaker_attribution": "unattributed_mix; name observer disabled for the audio benchmark",
         "machine": {"os": platform.system(), "release": platform.release(),
                     "architecture": platform.machine(), "processor": platform.processor(),
                     "logical_cpus": os.cpu_count(), "python": platform.python_version(),
@@ -114,7 +110,6 @@ def main():
             "Output endpoint mixes all applications; test requires other audio apps quiet",
             "No Zoom/network/media-delivery or UI speaker matching validated by this test",
             "Wall real_time_factor includes paced playback, silence and startup; inference ratio is reported separately",
-            "Voice-cluster coverage does not validate identity accuracy; the same 52 public words are a smoke test, not an independent benchmark",
         ],
     }
     engine = Transcriber(args.model_dir or DesktopSettings.load().model_dir)
@@ -125,20 +120,6 @@ def main():
         with Measurement() as model_load:
             engine.load()
         report["cold_model_load"] = model_load.result()
-        diarization = None
-        if args.diarization_model:
-            from gigaam_zoom.diarization import SherpaSpeakerEmbedder, OnlineDiarizer, DiarizationTimeline
-            with Measurement() as diarization_load:
-                embedder = SherpaSpeakerEmbedder(args.diarization_model)
-                embedder.load()
-                diarization = DiarizationTimeline(OnlineDiarizer(embedder))
-            report["diarization_model_load"] = diarization_load.result()
-            report["diarization_model_sha256"] = embedder.model_spec.sha256
-            report["diarization_model_id"] = embedder.model_spec.model_id
-            report["diarization_threshold_profile"] = dict(zip(
-                ("match_threshold", "new_threshold", "margin", "half_similarity"), embedder.model_spec.thresholds))
-            report["versions"]["sherpa-onnx"] = metadata.version("sherpa-onnx")
-            report["implementation_sha256"]["gigaam_zoom/diarization.py"] = hashlib.sha256((ROOT / "gigaam_zoom/diarization.py").read_bytes()).hexdigest()
         store = Store(directory / "public-transcript.sqlite")
         origin_ms = round(time.monotonic() * 1000)
         for key, value in {"origin_ms": origin_ms, "time_basis": "local_capture",
@@ -152,8 +133,7 @@ def main():
             elif kind not in {"progress", "capture_timestamp"}:
                 events.append(kind)
         pipeline = Pipeline(store, engine, event, origin_ms=origin_ms,
-                            max_pending_seconds=24, segmenter=DesktopSegmenter(Timeline(), diarization=diarization),
-                            window_analyzer=diarization.analyze_window if diarization else None)
+                            max_pending_seconds=24, segmenter=DesktopSegmenter(Timeline()))
         def receive(source, pcm, stamp, rate):
             if source != "remote":
                 raise RuntimeError("Microphone must remain disabled")
@@ -200,17 +180,6 @@ def main():
             report["gap_count"] = len(list(store.iter_gaps()))
             report["source_ids"] = sorted({row.speaker_id for row in records})
             report["attributions"] = sorted({row.attribution for row in records})
-            if diarization:
-                total_words = sum(len(row.text.split()) for row in records)
-                attributed_words = sum(len(row.text.split()) for row in records if row.attribution == "voice_cluster")
-                report["voice_grouping"] = {
-                    "anonymous_cluster_count": diarization.diarizer.speaker_count,
-                    "word_count": total_words, "words_with_cluster_estimate": attributed_words,
-                    "word_coverage": attributed_words / max(1, total_words),
-                    "true_identity_accuracy_validated": False,
-                    "overlap_accuracy_validated": False,
-                    "note": "Coverage measures labels emitted, not correctness; no named-person inference is made",
-                }
             report["timestamps_valid"] = all(0 <= row.start < row.end <= processing.wall + 3 for row in records)
             # Match each final segment to its played public clip by its midpoint.
             report["samples"] = []
@@ -222,19 +191,6 @@ def main():
                     **score(clip["item"]["reference"], hypothesis), "segment_count": len(assigned),
                     "speaker_label_word_counts": {source: sum(len(row.text.split()) for row in assigned if row.speaker_id == source)
                                                   for source in sorted({row.speaker_id for row in assigned})}})
-            if diarization:
-                cluster_languages = {}
-                for sample in report["samples"]:
-                    for source in sample["speaker_label_word_counts"]:
-                        if source.startswith("local:voice:"):
-                            cluster_languages.setdefault(source, []).append(sample["fixture"]["language"])
-                report["voice_grouping"]["cluster_fixture_languages"] = cluster_languages
-                report["voice_grouping"]["clusters_shared_across_different_fixture_languages"] = {
-                    source: languages for source, languages in cluster_languages.items() if len(languages) > 1}
-                report["voice_grouping"]["fixture_identity_basis"] = (
-                    "The three clips are separate public recordings with distinct corpus/sample provenance; "
-                    "human identities are not independently verified. Shared clusters expose a possible merge, "
-                    "not a biometric identity determination.")
             hypothesis = " ".join(row.text for row in records)
             reference = " ".join(item["reference"] for item, _ in clips)
             report["sequential_multilingual"] = score(reference, hypothesis)

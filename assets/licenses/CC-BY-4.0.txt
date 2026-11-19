@@ -2,9 +2,13 @@ Creative Commons Attribution 4.0 International (CC BY 4.0)
 Full license: https://creativecommons.org/licenses/by/4.0/legalcode
 License summary: https://creativecommons.org/licenses/by/4.0/
 
-Applies to wespeaker.onnx only. Attribution: WeSpeaker team; Wang et al.,
-ICASSP 2023. Original model: Wespeaker/wespeaker-voxceleb-resnet34-LM,
-revision f0c48c298fd835726c27956a5d617bad7115627e.
-https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/tree/f0c48c298fd835726c27956a5d617bad7115627e
-ONNX conversion by sherpa-onnx. No further model modifications here.
-The license link is provided under section 3(a)(1)(C) of CC BY 4.0.
+Reference for the historical public speech evaluation fixtures only:
+FLEURS — Google; Alexis Conneau et al., FLEURS: Few-shot Learning Evaluation
+of Universal Representations of Speech, 2022, https://arxiv.org/abs/2205.12446
+LibriSpeech — Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur;
+OpenSLR resource 12, https://www.openslr.org/12/
+
+Fixture audio is not included in this repository. Source/sample identifiers,
+preprocessing and SHA256 hashes are recorded in docs/evidence. This notice
+makes no endorsement claim. GigaAM code and weights are licensed separately
+under MIT; this CC BY reference does not apply to them.

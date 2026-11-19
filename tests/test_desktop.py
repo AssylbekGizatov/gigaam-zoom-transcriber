@@ -79,7 +79,7 @@ class SettingsTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.folder = Path(self.temp.name)
         self.config = self.folder / "settings.json"
-        self.settings = DesktopSettings(str(self.folder), str(self.folder), "Асылбек", True, False)
+        self.settings = DesktopSettings(str(self.folder), str(self.folder), "Асылбек", True)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -94,8 +94,7 @@ class SettingsTests(unittest.TestCase):
             self.assertNotIn(word, contents)
 
     def test_rejects_secret_fields_mistyped_flags_and_invalid_json(self):
-        for values in ({"access_token": "NEVER_EXPORT"}, {"client_secret": "NEVER_EXPORT"},
-                       {"use_microphone": 1}, {"read_zoom_names": "false"},
+        for values in ({"use_microphone": 1}, {"verbose_logging": "false"},
                        {"model_dir": []}, []):
             with self.subTest(values=values):
                 self.config.write_text(json.dumps(values), encoding="utf-8")
@@ -105,17 +104,12 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             DesktopSettings.load(self.config)
 
-    def test_migration_reads_only_public_paths_not_zoom_credentials(self):
-        old = SimpleNamespace(model_dir=str(self.folder), export_dir=str(self.folder),
-                              client_id="PRIVATE_CLIENT", client_secret="SECRET_TEST_VALUE")
-        with patch("gigaam_zoom.config.Settings.load", return_value=old):
-            migrated = DesktopSettings.load(self.config)
-        migrated.save(self.config)
-        contents = self.config.read_text(encoding="utf-8")
-        self.assertNotIn("PRIVATE_CLIENT", contents)
-        self.assertNotIn("SECRET_TEST_VALUE", contents)
-        self.assertEqual(migrated.model_dir, old.model_dir)
-        self.assertEqual(migrated.export_dir, old.export_dir)
+    def test_settings_migration_preserves_only_current_fields(self):
+        self.config.write_text(json.dumps({"export_dir": str(self.folder), "obsolete": "old"}))
+        migrated = DesktopSettings.load(self.config)
+        migrated.save(self.config, validate=False)
+        self.assertNotIn("obsolete", self.config.read_text())
+        self.assertEqual(migrated.export_dir, str(self.folder))
 
     def test_empty_missing_network_paths_and_empty_name_are_rejected(self):
         invalid = [replace(self.settings, model_dir=""),
@@ -133,7 +127,7 @@ class DesktopLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.folder = Path(self.temp.name)
-        self.settings = DesktopSettings(str(self.folder), str(self.folder), "Асылбек", False, False)
+        self.settings = DesktopSettings(str(self.folder), str(self.folder), "Асылбек", False)
         self.engine = FakeEngine()
         self.events = []
         self.ready = threading.Event()
@@ -319,60 +313,12 @@ class DesktopLifecycleTests(unittest.TestCase):
 
 
 class AttributionPersistenceTests(unittest.TestCase):
-    def test_whole_source_correction_updates_only_voice_id_in_selected_epoch(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = Store(Path(directory) / "source-corrections.sqlite")
-            try:
-                originals = [
-                    Segment("first", "local:voice:001", "Говорящий 1", 0, 1, "Первое", "final", "epoch-one", "voice_cluster"),
-                    Segment("second", "local:voice:001", "Говорящий 1", 2, 3, "Второе", "final", "epoch-one", "voice_cluster"),
-                    Segment("different-voice", "local:voice:002", "Говорящий 2", 4, 5, "Третье", "final", "epoch-one", "voice_cluster"),
-                    Segment("restarted", "local:voice:001", "Говорящий 1", 6, 7, "Другой сеанс", "final", "epoch-two", "voice_cluster"),
-                    Segment("mixed", "local:remote", "Не определён", 8, 9, "Смешанный", "final", "epoch-one", "unattributed_mix"),
-                ]
-                for segment in originals:
-                    store.upsert(segment)
-                store.correct_speaker("first", "Алия", whole_source=True)
-                actual = {segment.id: segment for segment in store.iter_segments()}
-                for segment in originals:
-                    expected = (replace(segment, display_name="Алия", attribution="manual")
-                                if segment.id in {"first", "second"} else segment)
-                    self.assertEqual(actual[segment.id], expected)
-                events = list(store.iter_participant_events())
-                self.assertEqual(len(events), 1)
-                self.assertEqual(events[0]["source_epoch"], "epoch-one")
-                self.assertEqual(events[0]["user_id"], "local:voice:001")
-                self.assertEqual(events[0]["event"], "manual_source_correction:first")
-            finally:
-                store.close()
-
-    def test_whole_source_correction_rejects_mixed_mic_ui_and_zoom_sources_atomically(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = Store(Path(directory) / "restricted-corrections.sqlite")
-            try:
-                sources = [("local:remote", "unattributed_mix"),
-                           ("local:microphone", "local_microphone"),
-                           ("local:zoom-uia:one", "zoom_ui_hint"), ("42", "zoom_source_id")]
-                for index, (source, attribution) in enumerate(sources):
-                    segment = Segment(str(index), source, "Исходное имя", index, index + 1,
-                                      "Сохранить текст", "final", "session", attribution)
-                    store.upsert(segment)
-                    with self.subTest(source=source), self.assertRaises(ValueError):
-                        store.correct_speaker(segment.id, "Не применять ко всем", whole_source=True)
-                    self.assertIn(segment, list(store.iter_segments()))
-                self.assertEqual(list(store.iter_participant_events()), [])
-                # A deliberate single-reply correction remains available.
-                store.correct_speaker("0", "Ручная подпись одной реплики")
-                self.assertEqual(store.recent()[0].attribution, "manual")
-            finally:
-                store.close()
-
     def test_finalization_persists_final_attribution(self):
         with tempfile.TemporaryDirectory() as directory:
             store = Store(Path(directory) / "final-provenance.sqlite")
             try:
-                preliminary = Segment("same", "local:voice:001", "Говорящий 1", 0, 1,
-                                      "черновик", "preliminary", "session", "voice_cluster")
+                preliminary = Segment("same", "local:remote", "Неизвестно", 0, 1,
+                                      "черновик", "preliminary", "session", "unattributed_mix")
                 final = replace(preliminary, text="финальный текст", status="final", end=2,
                                 display_name="Алия", attribution="manual")
                 store.upsert(preliminary)
@@ -400,8 +346,8 @@ class AttributionPersistenceTests(unittest.TestCase):
                 self.assertEqual(store.recent()[0].attribution, "zoom_source_id")
                 self.assertEqual(store.get_metadata("schema_version"), 2)
                 store.set_metadata("capture_mode", "desktop_loopback")
-                store.upsert(Segment("new", "local:zoom-uia:fixture", "Алия (по окну Zoom)",
-                                     2, 3, "Қазақ Русский English", "final", "desktop", "zoom_ui_hint"))
+                store.upsert(Segment("new", "local:zoom-ocr:fixture", "Алия",
+                                     2, 3, "Қазақ Русский English", "final", "desktop", "zoom_ocr_hint"))
                 store.upsert(Segment("unknown", "local:remote", "Не определён", 4, 5,
                                      "Unknown", "final", "desktop", "unattributed_mix"))
                 store.correct_speaker("unknown", "Исправлено вручную")
@@ -419,47 +365,12 @@ class AttributionPersistenceTests(unittest.TestCase):
                     # Markdown escapes underscores; compare meaningful provenance
                     # after removing its escapes rather than implementation markup.
                     text = text.replace("\\_", "_")
-                    for value in ("zoom_ui_hint", "manual", "по окну Zoom", "Исправлено вручную"):
+                    for value in ("zoom_ocr_hint", "manual", "Алия", "Исправлено вручную"):
                         self.assertIn(value, text, kind)
                     if kind != "JSON":
                         self.assertIn("это не Zoom ID", text, kind)
                 doc = json.loads((folder / "export.json").read_text(encoding="utf-8"))
-                self.assertEqual(doc["segments"][1]["attribution"], "zoom_ui_hint")
+                self.assertEqual(doc["segments"][1]["attribution"], "zoom_ocr_hint")
                 self.assertEqual(doc["segments"][2]["attribution"], "manual")
             finally:
                 store.close()
-
-
-class OptionalAnalyzerTests(unittest.TestCase):
-    def test_analyzer_error_keeps_asr_text_and_disables_only_failed_analyzer(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = Store(Path(directory) / "analysis-failure.sqlite")
-            events, calls = [], []
-            def broken_analyzer(source_id, samples, rate, start):
-                calls.append((source_id, len(samples), rate, start))
-                raise RuntimeError("Optional speaker model failed")
-            pipeline = Pipeline(store, FakeEngine(), lambda kind, payload: events.append((kind, payload)),
-                                origin_ms=10_000, segmenter=DesktopSegmenter(Timeline()),
-                                window_analyzer=broken_analyzer)
-            try:
-                pipeline.start()
-                pcm = np.full(16_000, 1000, dtype="<i2").tobytes()
-                pipeline.feed(AudioPacket("local:remote", "mixed", 10_500, pcm, epoch="capture"))
-                pipeline.feed(AudioPacket("local:microphone", "me", 12_000, pcm, epoch="capture"))
-                pipeline.stop()
-                segments = list(store.iter_segments())
-                self.assertEqual(len(segments), 2)
-                self.assertEqual([s.text for s in segments], ["Сәлем hello", "Сәлем hello"])
-                self.assertEqual({s.attribution for s in segments}, {"unattributed_mix", "local_microphone"})
-                self.assertEqual(calls, [("local:remote", 16_000, 16_000, .5)])
-                self.assertIsNone(pipeline.window_analyzer)
-                self.assertEqual(sum(kind == "attribution_failed" for kind, _ in events), 1)
-                self.assertFalse(any(kind in {"inference_failed", "store_error"} for kind, _ in events))
-                self.assertEqual(list(store.iter_gaps()), [])
-            finally:
-                pipeline.stop()
-                store.close()
-
-
-if __name__ == "__main__":
-    unittest.main()

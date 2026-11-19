@@ -105,8 +105,8 @@ def _timing_note(metadata: dict) -> str:
     if metadata.get("capture_mode") == "desktop_loopback":
         return ("Время от включения локального захвата; более ранняя речь недоступна. "
                 "Звук выбранного выхода Windows смешанный. ID локальные, это не Zoom ID. "
-                "zoom_ui_hint — предположение по доступной метке говорящего в Zoom, "
-                "local_microphone — ваш микрофон, voice_cluster — приблизительное различение голосов, unattributed_mix — имя неизвестно, "
+                "zoom_ocr_hint — имя с экрана в настроенной области Speaker View (OCR, возможны ошибки), "
+                "local_microphone — ваш микрофон, unattributed_mix — имя неизвестно, "
                 "manual — имя исправлено пользователем. Одновременная речь не разделяется. "
                 "Аудио и видео не сохранялись; распознавание выполнялось на этом компьютере.")
     if metadata.get("time_basis") == "track":
