@@ -7,7 +7,8 @@ Example (Windows, from the repository root):
 
 The OCR region is x,y,width,height as fractions of the Zoom meeting client
 area. Use an unpinned Speaker View and select only its displayed speaker name.
-Keep the crop visible and uncovered. Full-window OCR is for diagnostics only;
+Keep Zoom restored. Window capture can work behind other windows; screen-DC
+fallback requires the crop to be uncovered. Full-window OCR is for diagnostics only;
 normal transcription requires the calibrated nameplate. Raw OCR output and
 PNG saving are opt-in. No network requests.
 """
@@ -117,7 +118,8 @@ def main(argv=None) -> int:
         return 2
     print("Output contains Zoom participant names. Review/redact it before sharing. "
           "Raw lines print only with --dump-ocr-text; PNG writes only with --save-debug-frame.", file=sys.stderr)
-    print("Use unpinned Speaker View with an uncovered nameplate. Full-window --region "
+    print("Use unpinned Speaker View with Zoom restored. If window capture fails, uncover "
+          "the nameplate for screen-DC fallback. Full-window --region "
           "0,0,1,1 is a debug probe, not a calibrated speaker region.", file=sys.stderr)
     observer = ZoomSpeakerObserver(visual_config=config, log_samples=False)
     started = time.monotonic()
@@ -133,6 +135,7 @@ def main(argv=None) -> int:
                     "observed_at_ms": observation.observed_at_ms,
                     "name": observation.display_name, "evidence": observation.evidence,
                     "timings": frame.timings, "max_age_ms": frame.max_age_ms,
+                    "capture_method": frame.capture_method, "capture_attempts": frame.capture_attempts,
                 })
                 output["elapsed_ms"] = round((time.monotonic() - started) * 1000)
                 _print_json(output)

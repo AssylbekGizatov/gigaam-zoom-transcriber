@@ -4,6 +4,37 @@ from types import SimpleNamespace
 from gigaam_zoom import app_log
 
 
+def test_weighted_decisions_log_session_aliases_and_verbose_names(tmp_path):
+    path = app_log.configure_logging(directory=tmp_path)
+    candidates = [("Тестовое имя", 721.5), ("Second Name", 125)]
+    app_log.log_attribution(500, 2500, candidates, "Тестовое имя", "weighted_overlap")
+    app_log.log_attribution(1100, 3100, candidates, None, "speaker_conflict")
+    contents = path.read_text(encoding="utf-8")
+    assert all(name not in contents for name, _ in candidates)
+    first, second = [json.loads(line) for line in contents.splitlines()][-2:]
+    assert first["window_ms"] == [500, 2500] and first["reason"] == "weighted_overlap"
+    assert first["candidates"] == second["candidates"]
+    assert first["chosen"] == first["candidates"][0]["speaker"]
+    assert first["candidates"][0]["weighted_ms"] == 721.5 and second["chosen"] is None
+    app_log.set_verbose_logging(True)
+    try:
+        app_log.log_attribution(500, 2500, candidates, "Тестовое имя", "weighted_overlap")
+        assert json.loads(path.read_text(encoding="utf-8").splitlines()[-1])["chosen"] == "Тестовое имя"
+    finally:
+        app_log.set_verbose_logging(False)
+
+
+def test_capture_attempt_logs_only_method_and_evidence(tmp_path):
+    path = app_log.configure_logging(directory=tmp_path)
+    app_log.log_event("ocr_observation", capture_method="printwindow",
+                      capture_attempts=[{"method": "wgc", "evidence": "capture_blank", "window": "Private meeting"},
+                                        {"method": "printwindow", "evidence": "ok"}])
+    row = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+    assert row["capture_method"] == "printwindow"
+    assert row["capture_attempts"] == [{"method": "wgc", "evidence": "capture_blank"},
+                                       {"method": "printwindow", "evidence": "ok"}]
+
+
 def test_logs_allowlist_frame_and_strip_sensitive_exception_messages(tmp_path):
     path = app_log.configure_logging(directory=tmp_path)
     word = "Alice Johnson"

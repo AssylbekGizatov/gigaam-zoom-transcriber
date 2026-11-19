@@ -19,13 +19,15 @@ EXPORT_FORMATS = ("TXT", "MD", "DOCX", "PDF", "JSON")
 MAX_DOCX_CHARACTERS = 2_000_000
 MAX_PDF_PAGES = 1000
 TITLE = "Транскрипция встречи Zoom"
+INFERRED_NAME_NOTE = "имя восстановлено по соседним репликам"
+# Retained for archived RTMS sessions; desktop capture has its own note below.
 TIMING_NOTE = (
     "Метки реплик приблизительные. "
     "Участник определяется по идентификатору источника Zoom; общий микрофон не разделяется на людей. "
     "Предварительный текст может измениться. Пропуски аудио перечислены отдельно."
 )
 _SENSITIVE = re.compile(r"secret|token|password|authorization|credential|signature|passcode|join_url|meeting_url", re.I)
-_SEGMENT_FIELDS = ("id", "speaker_id", "display_name", "start", "end", "text", "status", "source_epoch", "attribution")
+_SEGMENT_FIELDS = ("id", "speaker_id", "display_name", "start", "end", "text", "status", "source_epoch", "attribution", "attribution_reason")
 
 
 def format_time(seconds: float) -> str:
@@ -83,8 +85,11 @@ def _record(segment: Any) -> dict:
 
 
 def _label(record: dict) -> str:
+    name = record["display_name"]
+    if record.get("attribution") == "inferred_gap_fill":
+        name += f" ({INFERRED_NAME_NOTE})"
     return (f"[{format_time(record['start'])} - {format_time(record['end'])}] "
-            f"{record['display_name']} [ID {record['speaker_id']}; "
+            f"{name} [ID {record['speaker_id']}; "
             f"epoch {record['source_epoch']}; {record['status']}; {record.get('attribution') or 'zoom_source_id'}; segment {record['id']}]")
 
 
@@ -102,10 +107,11 @@ def _events(store: Any) -> Iterable[dict]:
 
 
 def _timing_note(metadata: dict) -> str:
-    if metadata.get("capture_mode") == "desktop_loopback":
+    if metadata.get("capture_mode") == "desktop_loopback" or metadata.get("time_basis") == "local_capture":
         return ("Время от включения локального захвата; более ранняя речь недоступна. "
                 "Звук выбранного выхода Windows смешанный. ID локальные, это не Zoom ID. "
                 "zoom_ocr_hint — имя с экрана в настроенной области Speaker View (OCR, возможны ошибки), "
+                "inferred_gap_fill — имя предположено по соседним подтверждённым репликам, "
                 "local_microphone — ваш микрофон, unattributed_mix — имя неизвестно, "
                 "manual — имя исправлено пользователем. Одновременная речь не разделяется. "
                 "Аудио и видео не сохранялись; распознавание выполнялось на этом компьютере.")

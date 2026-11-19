@@ -54,6 +54,7 @@ class _State:
     dropped: bool = False
     last_received: float = field(default_factory=monotonic)
     recent: deque = field(default_factory=lambda: deque(maxlen=128))
+    retention_token: str = field(default_factory=lambda: uuid4().hex)
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ class _Window:
     own_end: float
     received: float
     context: deque
+    retention_token: str = field(default_factory=lambda: uuid4().hex)
 
     @property
     def duration(self):
@@ -166,6 +168,10 @@ class Pipeline:
             self._stats["failed"] = True
             self._stats["lost_seconds"] = self._pending_locked()
             self._closing = True
+            for window in self._queue:
+                self._release_attribution(window.retention_token)
+            for state in self._states.values():
+                self._release_attribution(state.retention_token)
             self._queue.clear()
             self._work_seconds = self._inflight_seconds
             self._states.clear()
@@ -211,8 +217,19 @@ class Pipeline:
 
     def _retire_locked(self, key):
         state = self._states.pop(key)
+        self._release_attribution(state.retention_token)
         if state.previous_end is not None:
             self.store.set_source_cursor(key[1], key[0], state.previous_end)
+
+    def _retain_attribution(self, token, source_id, start, end):
+        retain = getattr(self.segmenter, "retain", None)
+        if retain is not None and self.origin_ms is not None:
+            retain(token, source_id, self.origin_ms + start * 1000, self.origin_ms + end * 1000)
+
+    def _release_attribution(self, token):
+        release = getattr(self.segmenter, "release", None)
+        if release is not None:
+            release(token)
 
     def _gap(self, key, start, end, reason):
         try:
@@ -324,6 +341,9 @@ class Pipeline:
                 elif state.quiet_seconds >= PAUSE_SECONDS:
                     self._flush_locked(key, final=True)
             self._stats["peak_pending_seconds"] = max(self._stats["peak_pending_seconds"], self._pending_locked())
+            if state.frames:
+                self._retain_attribution(state.retention_token, key[1], state.own_start,
+                                         state.start + state.frames / state.rate)
             return True
 
     def _flush_locked(self, key, *, final):
@@ -334,17 +354,21 @@ class Pipeline:
         end = state.start + len(pcm) / state.rate
         own_end = end if final else end - OVERLAP_SECONDS / 2
         if own_end > state.own_start + 1e-8:
-            self._queue.append(_Window(key, state.name, pcm, state.rate, state.start,
-                                       state.own_start, own_end, state.last_received, state.recent))
+            window = _Window(key, state.name, pcm, state.rate, state.start,
+                             state.own_start, own_end, state.last_received, state.recent)
+            self._retain_attribution(window.retention_token, key[1], window.own_start, window.own_end)
+            self._queue.append(window)
             self._work_seconds += len(pcm) / state.rate
             self._condition.notify()
         if final:
             state.parts, state.frames, state.quiet_seconds = [], 0, 0.0
+            self._release_attribution(state.retention_token)
         else:
             retained = pcm[-round(OVERLAP_SECONDS * state.rate):].copy()
             state.parts, state.frames = [retained], len(retained)
             state.start = end - len(retained) / state.rate
             state.own_start = own_end
+            self._retain_attribution(state.retention_token, key[1], state.own_start, end)
 
     def flush(self):
         with self._condition:
@@ -399,6 +423,7 @@ class Pipeline:
                 self._emit("inference_failed", {"message": "Не удалось распознать фрагмент. Следующие фрагменты обрабатываются.",
                                                  "error_type": type(error).__name__})
             finally:
+                self._release_attribution(window.retention_token)
                 elapsed = perf_counter() - started
                 with self._condition:
                     self._work_seconds = max(0.0, self._work_seconds - window.duration)

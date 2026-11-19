@@ -49,7 +49,8 @@ py -3.13 scripts/evaluate_desktop.py --help
 
 [Отчёт проверки](evidence/windows313-dependencies.json) фиксирует успешный
 `pip --dry-run` для `win_amd64`, CPython 3.13 (`cp313`). Проверены все desktop-
-зависимости, включая CPU Torch/Torchaudio, PyAudioWPatch и WinRT. На Linux
+зависимости, включая CPU Torch/Torchaudio, PyAudioWPatch и WinRT OCR/WGC. Для шести
+новых WGC-модулей проверены и сами wheels с нативными `.pyd` для `cp313-win_amd64`. На Linux
 Windows-маркеры верхнего уровня были явно включены для этой проверки;
 чисто Python wheels vendored GigaAM и ANTLR были предварительно собраны локально.
 Это проверяет совместимость метаданных и наличие подходящих wheels, но не

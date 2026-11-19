@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .desktop import DesktopController, DesktopSettings
 from .app_log import breadcrumb, log_event, log_exception, log_directory, set_verbose_logging
 from .desktop_audio import list_devices
-from .exports import default_export_name, export_transcript, format_time
+from .exports import INFERRED_NAME_NOTE, default_export_name, export_transcript, format_time
 from .store import Store
 
 
@@ -38,7 +38,7 @@ def speaker_status(payload):
         "ocr_region_offscreen": "Область имени за пределами экрана; переместите окно Zoom",
         "ocr_focus_failed": "Не удалось открыть окно Zoom; переключитесь в него вручную",
         "ocr_window_unavailable": "Окно встречи Zoom недоступно",
-        "ocr_capture_blank": "Область имени пуста или закрыта другим окном",
+        "ocr_capture_blank": "Zoom не вернул изображение имени; откройте окно встречи",
         "ocr_name_ambiguous": "В области несколько имён; выделите одну подпись",
         "ocr_name_ui_only": "В области кнопки Zoom; выделите только имя",
         "ocr_unavailable": "OCR недоступен; проверьте зависимости Windows",
@@ -60,7 +60,7 @@ def speaker_status(payload):
         "ocr_window_changed": "Окно Zoom изменилось во время чтения; повторная проверка",
         "ocr_capture_unavailable": "Не удалось получить изображение окна Zoom",
         "ocr_region_too_small": "Область слишком мала; заново выделите полное имя",
-        "ocr_region_occluded": "Другое окно перекрывает область имени",
+        "ocr_region_occluded": "Не удалось прочитать перекрытую область имени; откройте окно Zoom",
         "ocr_name_clipped": "Имя обрезано; выберите область шире",
         "ocr_name_missing": "В выбранной области не видно полного имени",
         "ocr_confirming": "Ожидание повторного чтения имени",
@@ -519,7 +519,7 @@ class DesktopApplication:
             if region:
                 self.ocr_region.set(region)
                 self.ocr_client_size.set(client_size or "")
-                self.status.set("Область имени выбрана. Оставьте её видимой во время встречи.")
+                self.status.set("Область имени выбрана. Не сворачивайте Zoom во время встречи.")
                 self.update_checklist()
                 self.settings().save(validate=False)
 
@@ -578,9 +578,20 @@ class DesktopApplication:
         selected = self.table.selection()
         if not selected or not self.controller.store:
             return
-        name = simpledialog.askstring("Имя говорящего", "Имя для выбранной реплики:", parent=self.root)
+        identifier = selected[0]
+        segment = self.controller.store.segment_by_id(identifier)
+        if segment is None:
+            self.post("refresh")
+            return
+        prompt = "Имя для выбранной реплики:"
+        if getattr(segment, "attribution", "") == "inferred_gap_fill":
+            prompt = (INFERRED_NAME_NOTE.capitalize() + ".\n"
+                      "Для этой реплики нет прямого чтения имени.\n"
+                      "Исправление будет сохранено вручную.\n\n" + prompt)
+        elif getattr(segment, "attribution", "") == "manual":
+            prompt = "Имя этой реплики уже исправлено вручную.\n\n" + prompt
+        name = simpledialog.askstring("Имя говорящего", prompt, initialvalue=segment.display_name, parent=self.root)
         if name:
-            identifier = selected[0]
             self.background(lambda: (self.controller.store.correct_speaker(identifier, name), self.post("refresh")))
 
     def open_session(self):
@@ -662,8 +673,10 @@ class DesktopApplication:
                         self.zoom_status.set("Zoom: OCR недоступен")
                     elif reason == "ocr_window_minimized":
                         self.zoom_status.set("Zoom: свёрнут")
-                    elif reason in {"ocr_region_occluded", "ocr_capture_blank"}:
-                        self.zoom_status.set("Zoom: область перекрыта или пуста")
+                    elif reason == "ocr_region_occluded":
+                        self.zoom_status.set("Zoom: откройте область имени")
+                    elif reason == "ocr_capture_blank":
+                        self.zoom_status.set("Zoom: изображение недоступно")
                     elif reason in {"zoom_window_not_found", "zoom_window_ambiguous"}:
                         self.zoom_status.set("Zoom: нужна одна открытая встреча")
                     elif reason in {"ocr_recalibration_required", "ocr_window_changed"}:

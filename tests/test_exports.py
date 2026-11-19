@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from gigaam_zoom.exports import EXPORT_FORMATS, export_transcript, format_time
+from gigaam_zoom.exports import EXPORT_FORMATS, INFERRED_NAME_NOTE, export_transcript, format_time
 
 
 class FakeStore:
@@ -31,7 +31,77 @@ class FakeStore:
                "reason": "reconnect", "authorization": "DO_NOT_EXPORT"}
 
 
+class ProvenanceStore(FakeStore):
+    def get_metadata(self):
+        return {"capture_mode": "desktop_loopback", "time_basis": "local_capture"}
+
+    def iter_segments(self):
+        rows = (("ПрямоеИмя", "zoom_ocr_hint", "confirmed"),
+                ("ВосстановленноеИмя", "inferred_gap_fill", "no_observations"),
+                ("ИсправленноеИмя", "manual", "manual_correction"),
+                ("АрхивноеИмя", None, None))
+        for index, (name, attribution, reason) in enumerate(rows):
+            row = {"id": str(index), "speaker_id": "local:zoom-ocr:source", "display_name": name,
+                   "start": index, "end": index + .5, "text": f"Реплика {index} сохранена.",
+                   "status": "final", "source_epoch": "desktop"}
+            if attribution is not None:
+                row.update(attribution=attribution, attribution_reason=reason)
+            yield row
+
+
 class ExportTests(unittest.TestCase):
+    def test_inferred_names_are_marked_in_human_exports_without_relabelling_other_rows(self):
+        from docx import Document
+        from pypdf import PdfReader
+
+        with tempfile.TemporaryDirectory() as directory:
+            for kind in ("TXT", "DOCX", "PDF"):
+                with self.subTest(kind=kind):
+                    path = export_transcript(ProvenanceStore(), Path(directory) / f"provenance.{kind.lower()}", kind)
+                    if kind == "DOCX":
+                        text = " ".join(p.text for p in Document(path).paragraphs)
+                    elif kind == "PDF":
+                        text = " ".join(page.extract_text() for page in PdfReader(path).pages)
+                    else:
+                        text = path.read_text(encoding="utf-8")
+                    text = " ".join(text.split())
+                    self.assertIn(f"ВосстановленноеИмя ({INFERRED_NAME_NOTE}) [ID", text)
+                    self.assertEqual(text.count(INFERRED_NAME_NOTE), 1)
+                    for name in ("ПрямоеИмя", "ИсправленноеИмя", "АрхивноеИмя"):
+                        self.assertIn(name + " [ID", text)
+                    for index in range(4):
+                        self.assertIn(f"Реплика {index} сохранена.", text)
+                    self.assertIn("inferred_gap_fill", text)
+                    self.assertIn("ID локальные, это не Zoom ID", text)
+                    self.assertIn("имя с экрана", text)
+                    self.assertIn("имя предположено по соседним подтверждённым репликам", text)
+                    self.assertNotIn("Участник определяется по идентификатору источника Zoom", text)
+                    self.assertNotIn("RTMS", text)
+
+    def test_local_capture_clock_uses_desktop_note_even_without_capture_mode(self):
+        class LegacyDesktop(ProvenanceStore):
+            def get_metadata(self):
+                return {"time_basis": "local_capture"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = export_transcript(LegacyDesktop(), Path(directory) / "desktop.txt", "TXT")
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("ID локальные, это не Zoom ID", text)
+        self.assertNotIn("Участник определяется по идентификатору источника Zoom", text)
+        self.assertNotIn("RTMS", text)
+
+    def test_json_keeps_provenance_and_unmodified_names_for_new_and_legacy_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = export_transcript(ProvenanceStore(), Path(directory) / "provenance.json", "JSON")
+            rows = json.loads(path.read_text(encoding="utf-8"))["segments"]
+        self.assertEqual(rows[1]["display_name"], "ВосстановленноеИмя")
+        self.assertEqual(rows[1]["attribution"], "inferred_gap_fill")
+        self.assertEqual(rows[1]["attribution_reason"], "no_observations")
+        self.assertEqual(rows[2]["display_name"], "ИсправленноеИмя")
+        self.assertEqual(rows[2]["attribution_reason"], "manual_correction")
+        self.assertEqual(rows[3]["display_name"], "АрхивноеИмя")
+        self.assertIsNone(rows[3]["attribution_reason"])
+
     def test_text_formats_and_json_preserve_ids_times_status_and_gap(self):
         with tempfile.TemporaryDirectory() as directory:
             for kind in ("TXT", "MD", "JSON"):

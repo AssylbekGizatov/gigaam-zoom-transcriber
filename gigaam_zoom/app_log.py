@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from hashlib import blake2s
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -54,6 +55,7 @@ _lock = threading.RLock()
 _logger = logging.Logger("gigaam_zoom.local", logging.INFO)
 _logger.propagate = False
 _session = uuid.uuid4().hex
+_alias_key = os.urandom(16)
 _directory: Path | None = None
 _crash_file = None
 _crash_relay = None
@@ -61,6 +63,8 @@ _verbose = False
 _CODE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+\Z")
 _LANGUAGE = re.compile(r"[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*\Z")
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
+_SEGMENT_ID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
+_CAPTURE_METHODS = {"wgc", "printwindow", "screen_dc"}
 
 
 def log_directory() -> Path:
@@ -198,6 +202,15 @@ def log_event(event: str, **fields) -> None:
             allowed[key] = value
         elif key == "language" and isinstance(value, str) and _LANGUAGE.fullmatch(value):
             allowed[key] = value
+        elif key in {"segment_id", "left_anchor_id", "right_anchor_id"} and isinstance(value, str) and _SEGMENT_ID.fullmatch(value):
+            allowed[key] = value
+        elif key == "capture_method" and value in _CAPTURE_METHODS:
+            allowed[key] = value
+        elif key == "capture_attempts" and isinstance(value, (list, tuple)):
+            allowed[key] = [{"method": a["method"], "evidence": a["evidence"]} for a in value[:3]
+                            if isinstance(a, dict) and a.get("method") in _CAPTURE_METHODS
+                            and isinstance(a.get("evidence"), str)
+                            and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", a["evidence"])]
         elif key in {"model_ok", "enabled", "microphone_enabled", "calibrated"} and type(value) is bool:
             allowed[key] = value
         elif key in {"device_index", "loopback_index", "microphone_index", "capture_ms", "ocr_ms",
@@ -219,6 +232,7 @@ def log_event(event: str, **fields) -> None:
 def log_ocr_frame(frame) -> None:
     """Allowlist frame telemetry at the parent boundary. Never serialize the frame."""
     log_event("ocr_observation", evidence=frame.observation.evidence, decision=frame.parser_reason,
+              capture_method=getattr(frame, "capture_method", ""), capture_attempts=getattr(frame, "capture_attempts", ()),
               capture_ms=frame.timings.get("capture_ms"), ocr_ms=frame.timings.get("ocr_ms"),
               max_age_ms=frame.max_age_ms, line_count=frame.line_count, word_count=frame.word_count,
               client_rect=frame.window.get("client_rect"), image_size=frame.image_size,
@@ -228,6 +242,29 @@ def log_ocr_frame(frame) -> None:
     if isinstance(info, dict) and set(info) == {"error_type", "stack"}:
         with _lock:
             _write("ocr_backend_error", info)
+
+
+def log_attribution(window_start_ms, window_end_ms, candidates, chosen, reason, *, segment_id=None):
+    """Record weighted OCR evidence on the capture clock. Real names require explicit opt-in."""
+    def label(name):
+        if _verbose:
+            return _hide_home(name)[:512]
+        digest = blake2s(name.encode("utf-8"), key=_alias_key, digest_size=8).hexdigest()
+        return "speaker-" + digest
+
+    if not all(isinstance(t, (int, float)) and math.isfinite(t) for t in (window_start_ms, window_end_ms)):
+        return
+    with _lock:
+        fields = {"window_ms": [round(window_start_ms), round(window_end_ms)],
+                  "candidates": [{"speaker": label(name), "weighted_ms": round(weight, 2)}
+                                 for name, weight in candidates if isinstance(name, str) and name
+                                 and isinstance(weight, (int, float)) and math.isfinite(weight) and weight >= 0],
+                  "chosen": label(chosen) if isinstance(chosen, str) and chosen else None,
+                  "reason": reason if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason)
+                  else "unknown_reason"}
+        if isinstance(segment_id, str) and _SEGMENT_ID.fullmatch(segment_id):
+            fields["segment_id"] = segment_id
+        _write("attribution_decision", fields)
 
 
 def exception_details(exc: BaseException) -> dict:

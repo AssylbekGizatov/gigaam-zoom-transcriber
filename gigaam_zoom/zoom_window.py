@@ -1,8 +1,8 @@
 """Native Zoom window discovery and screen geometry in physical pixels.
 
 Discovery is repeated for each sample. A unique visible Zoom.exe meeting is
-required; foreground focus is not. A capture is allowed only when the entire
-region is on a monitor and no visible window above Zoom intersects it.
+required; foreground focus is not. Only screen-DC capture requires an uncovered
+on-screen region; window capture can read a restored window behind another app.
 """
 from __future__ import annotations
 
@@ -263,6 +263,12 @@ class _Win32:
                 raise WindowProbeError("ocr_window_changed")
         return rect.left, rect.top, rect.right, rect.bottom
 
+    def window_bounds(self, hwnd):
+        rect = self.w.RECT()
+        if not self.user.GetWindowRect(hwnd, self.c.byref(rect)):
+            raise WindowProbeError("ocr_window_changed")
+        return rect.left, rect.top, rect.right, rect.bottom
+
     def transparent(self, hwnd):
         color, alpha, flags = self.w.DWORD(), self.w.BYTE(), self.w.DWORD()
         success = self.user.GetLayeredWindowAttributes(hwnd, self.c.byref(color), self.c.byref(alpha), self.c.byref(flags))
@@ -393,6 +399,17 @@ def get_meeting_window(hwnd: int) -> MeetingWindow:
 def meeting_client_bounds() -> tuple[int, Bounds]:
     window = find_meeting_window()
     return window.hwnd, window.client_bounds
+
+
+def window_frame_bounds(hwnd: int) -> tuple[Bounds, Bounds]:
+    """Physical GetWindowRect and DWM extents for matching a capture texture.
+
+    WGC can omit invisible resize borders; PrintWindow uses GetWindowRect.
+    Callers compare dimensions rather than guessing a fixed title-bar offset.
+    """
+    with physical_pixels():
+        api = _api()
+        return api.window_bounds(hwnd), api.visible_bounds(hwnd)
 
 
 def list_monitors() -> list[MonitorInfo]:

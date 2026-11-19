@@ -19,8 +19,8 @@ jobs:
       - name: Import native Windows adapters without opening devices
         if: runner.os == 'Windows'
         run: |
-          python -m pip install PyAudioWPatch==0.2.12.8 winrt-runtime==3.2.1 winrt-Windows.Foundation==3.2.1 winrt-Windows.Foundation.Collections==3.2.1 winrt-Windows.Globalization==3.2.1 winrt-Windows.Media.Ocr==3.2.1 winrt-Windows.Graphics.Imaging==3.2.1 winrt-Windows.Storage.Streams==3.2.1 -c constraints.txt
-          python -c "import pyaudiowpatch, winrt.windows.media.ocr, winrt.windows.graphics.imaging"
+          python -m pip install PyAudioWPatch==0.2.12.8 winrt-runtime==3.2.1 winrt-Windows.Foundation==3.2.1 winrt-Windows.Foundation.Collections==3.2.1 winrt-Windows.Globalization==3.2.1 winrt-Windows.Media.Ocr==3.2.1 winrt-Windows.Graphics.Imaging==3.2.1 winrt-Windows.Storage.Streams==3.2.1 winrt-Windows.Graphics==3.2.1 winrt-Windows.Graphics.Capture==3.2.1 winrt-Windows.Graphics.Capture.Interop==3.2.1 winrt-Windows.Graphics.DirectX==3.2.1 winrt-Windows.Graphics.DirectX.Direct3D11==3.2.1 winrt-Windows.Graphics.DirectX.Direct3D11.Interop==3.2.1 -c constraints.txt
+          python -c "import pyaudiowpatch, winrt.windows.media.ocr, winrt.windows.graphics.imaging, winrt.windows.graphics.capture, winrt.windows.graphics.capture.interop, winrt.windows.graphics.directx.direct3d11, winrt.windows.graphics.directx.direct3d11.interop"
       - run: python scripts/check_publication.py
       - run: python -m pytest -q --junitxml=test-results.xml
       - uses: actions/upload-artifact@v4

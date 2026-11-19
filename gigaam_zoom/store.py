@@ -1,6 +1,7 @@
 """Disk-backed transcript journal. PCM and credentials never enter this database."""
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import math
 import os
@@ -9,7 +10,14 @@ import sqlite3
 import threading
 from typing import Iterator
 
+from .app_log import log_event
 from .models import Gap, Segment
+
+
+# Only missing evidence can be filled; an older journal with no decision code,
+# a positive overlap/silence signal, or a speaker conflict remains unchanged.
+_GAP_FILL_REASONS = ("no_observations", "missing_left_observation",
+                     "missing_right_observation", "observation_gap", "temporary_ocr_absence")
 
 
 class Store:
@@ -60,7 +68,25 @@ class Store:
         if "attribution" not in columns:
             self._db.execute("ALTER TABLE segments ADD COLUMN attribution TEXT NOT NULL DEFAULT 'zoom_source_id'")
             self._db.commit()
-        self.set_metadata("schema_version", 2)
+        if "attribution_reason" not in columns:
+            self._db.execute("ALTER TABLE segments ADD COLUMN attribution_reason TEXT NOT NULL DEFAULT ''")
+        # Keep ASR's original row immutable. A late segment, capture gap or manual
+        # edit can invalidate a previously inferred name without undoing user edits.
+        self._db.executescript("""
+            CREATE INDEX IF NOT EXISTS segments_epoch_start ON segments(source_epoch,start);
+            CREATE INDEX IF NOT EXISTS segments_epoch_end ON segments(source_epoch,end);
+            CREATE TABLE IF NOT EXISTS inferred_gap_fills (
+                segment_id TEXT PRIMARY KEY, left_id TEXT NOT NULL, right_id TEXT NOT NULL);
+            CREATE VIEW IF NOT EXISTS resolved_segments AS
+                SELECT s.id, COALESCE(l.speaker_id, s.speaker_id) AS speaker_id,
+                    COALESCE(l.display_name, s.display_name) AS display_name,
+                    s.start, s.end, s.text, s.status, s.source_epoch,
+                    CASE WHEN l.id IS NULL THEN s.attribution ELSE 'inferred_gap_fill' END AS attribution,
+                    s.attribution_reason
+                FROM segments AS s LEFT JOIN inferred_gap_fills AS f ON f.segment_id=s.id
+                    LEFT JOIN segments AS l ON l.id=f.left_id;
+        """)
+        self.set_metadata("schema_version", 3)
 
     def set_metadata(self, key: str, value) -> None:
         # Only structural metadata is permitted; secrets belong in OS keyring.
@@ -87,20 +113,91 @@ class Store:
                 or len(segment.text) > 100000):
             raise ValueError("Некорректная реплика.")
         with self._lock, self._db:
+            self._db.execute("BEGIN IMMEDIATE")  # Serialize the read/validate/write across connections too.
             old = self._db.execute("SELECT * FROM segments WHERE id=?", (segment.id,)).fetchone()
             if old:
                 previous = self._segment(old)
+                if previous.attribution == "manual":
+                    segment = replace(segment, display_name=previous.display_name, attribution="manual",
+                                      attribution_reason=previous.attribution_reason)
                 if previous == segment:
                     return  # Idempotent delivery/replay.
                 if previous.status == "final":
                     raise ValueError("Финальную реплику нельзя перезаписать.")
                 if (previous.speaker_id, previous.source_epoch, previous.start) != (segment.speaker_id, segment.source_epoch, segment.start):
                     raise ValueError("Источник и начало реплики неизменяемы.")
-            self._db.execute("""INSERT INTO segments VALUES (?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,
-                end=excluded.end,text=excluded.text,status=excluded.status,attribution=excluded.attribution""",
-                (segment.id, segment.speaker_id, segment.display_name, segment.start,
-                 segment.end, segment.text, segment.status, segment.source_epoch, segment.attribution))
+            self._db.execute("""INSERT INTO segments
+                (id,speaker_id,display_name,start,end,text,status,source_epoch,attribution,attribution_reason)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, end=excluded.end,
+                text=excluded.text,status=excluded.status,attribution=excluded.attribution,
+                attribution_reason=excluded.attribution_reason""",
+                (segment.id, segment.speaker_id, segment.display_name, segment.start, segment.end,
+                 segment.text, segment.status, segment.source_epoch, segment.attribution, segment.attribution_reason))
+            changes = self._refresh_gap_fills(segment.source_epoch, segment.start, max(segment.end, old["end"] if old else 0))
+        self._log_fill_changes(changes)
+
+    @staticmethod
+    def _log_fill_changes(changes):
+        # Only called after commit, including when the right anchor arrives late.
+        for event, segment_id, left, right in changes:
+            log_event(event, segment_id=segment_id, left_anchor_id=left, right_anchor_id=right)
+
+    def _refresh_gap_fills(self, epoch: str, start: float, end: float) -> list:
+        """Re-evaluate short unknowns touched by this edit inside the same write transaction."""
+        # An affected unknown starts at most 2s (anchor gap) + 1.5s (duration)
+        # before the edit, or less than 2s after it. Only a bounded time range
+        # of the index is scanned for ordinary inserts. Include newly corrected
+        # candidates so their old inference is withdrawn in the same transaction.
+        candidates = self._db.execute("""SELECT s.id,s.start,s.end,s.status,s.speaker_id,
+                s.attribution,s.attribution_reason,f.left_id,f.right_id
+            FROM segments s LEFT JOIN inferred_gap_fills f ON f.segment_id=s.id
+            WHERE s.source_epoch=? AND s.start BETWEEN ? AND ? AND round(s.end-s.start,9)<1.5
+              AND (f.segment_id IS NOT NULL OR (s.status='final' AND s.speaker_id='local:remote'
+              AND s.attribution='unattributed_mix' AND s.attribution_reason IN (?,?,?,?,?)))""",
+            (epoch, start - 3.5, end + 2, *_GAP_FILL_REASONS)).fetchall()
+        changes = []
+        for candidate in candidates:
+            old = (candidate["left_id"], candidate["right_id"]) if candidate["left_id"] else None
+            new = self._gap_anchors(epoch, candidate) if candidate["attribution"] == "unattributed_mix" else None
+            if old == new:
+                continue
+            if old:
+                self._db.execute("DELETE FROM inferred_gap_fills WHERE segment_id=?", (candidate["id"],))
+                changes.append(("gap_fill_withdrawn", candidate["id"], *old))
+            if new:
+                self._db.execute("INSERT INTO inferred_gap_fills VALUES (?,?,?)", (candidate["id"], *new))
+                changes.append(("gap_fill_applied", candidate["id"], *new))
+        return changes
+
+    def _gap_anchors(self, epoch, candidate):
+        # Always choose adjacent raw rows (including mic, manual, preliminary,
+        # and unknown rows). Never skip a non-anchor or chain through an inference.
+        cols = "id, speaker_id, display_name, attribution, status, start, end"
+        left = self._db.execute(f"""SELECT {cols} FROM segments WHERE source_epoch=?
+            AND end<=? AND end>? ORDER BY end DESC LIMIT 1""",
+            (epoch, candidate["start"], candidate["start"] - 2)).fetchone()
+        right = self._db.execute(f"""SELECT {cols} FROM segments WHERE source_epoch=?
+            AND start>=? AND start<? ORDER BY start LIMIT 1""",
+            (epoch, candidate["end"], candidate["end"] + 2)).fetchone()
+        if not all(row and row["status"] == "final" and row["attribution"] == "zoom_ocr_hint"
+                   and row["speaker_id"].startswith("local:zoom-ocr:")
+                   and row["speaker_id"].split(":", 2)[-1] not in {"", "unknown"}
+                   and row["display_name"].strip() for row in (left, right)):
+            return None
+        if (left["speaker_id"], left["display_name"]) != (right["speaker_id"], right["display_name"]):
+            return None
+        if max(round(candidate["start"] - left["end"], 9), round(right["start"] - candidate["end"], 9)) >= 2:
+            return None
+        # Covers overlaps AND ties, including another speaker ending when the
+        # left anchor ends. A missing audio interval also breaks the bracket.
+        conflict = self._db.execute("""SELECT 1 FROM segments WHERE source_epoch=?
+            AND start<=? AND end>=? AND id NOT IN (?,?,?) LIMIT 1""",
+            (epoch, right["start"], left["end"], left["id"], candidate["id"], right["id"])).fetchone()
+        if conflict or self._db.execute("""SELECT 1 FROM gaps WHERE source_epoch=? AND start<=? AND end>=?
+                LIMIT 1""", (epoch, right["start"], left["end"])).fetchone():
+            return None
+        return left["id"], right["id"]
 
     append = upsert
 
@@ -110,12 +207,15 @@ class Store:
         if not name or len(name) > 150 or any(ord(c) < 32 for c in name):
             raise ValueError("Введите имя длиной от 1 до 150 символов.")
         with self._lock, self._db:
-            row = self._db.execute("SELECT speaker_id,display_name,source_epoch FROM segments WHERE id=?", (segment_id,)).fetchone()
+            self._db.execute("BEGIN IMMEDIATE")
+            row = self._db.execute("SELECT speaker_id,display_name,source_epoch,start,end FROM segments WHERE id=?", (segment_id,)).fetchone()
             if not row:
                 raise ValueError("Реплика не найдена.")
-            self._db.execute("UPDATE segments SET display_name=?,attribution='manual' WHERE id=?", (name, segment_id))
+            self._db.execute("UPDATE segments SET display_name=?,attribution='manual',attribution_reason='manual_correction' WHERE id=?", (name, segment_id))
             self._db.execute("INSERT INTO participant_events(user_id,display_name,event,source_epoch) VALUES (?,?,?,?)",
                              (row[0], name, "manual_correction:" + segment_id, row[2]))
+            changes = self._refresh_gap_fills(row["source_epoch"], row["start"], row["end"])
+        self._log_fill_changes(changes)
 
     @staticmethod
     def _segment(row) -> Segment:
@@ -126,23 +226,28 @@ class Store:
         # the worker continues writing. fetchmany bounds Python memory.
         if str(self.path) == ":memory:":
             with self._lock:
-                cursor = self._db.execute("SELECT * FROM segments ORDER BY start,id")
+                cursor = self._db.execute("SELECT * FROM resolved_segments ORDER BY start,id")
                 while rows := cursor.fetchmany(256):
                     yield from (self._segment(row) for row in rows)
             return
         connection = sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True, timeout=10)
         connection.row_factory = sqlite3.Row
         try:
-            cursor = connection.execute("SELECT * FROM segments ORDER BY start,id")
+            cursor = connection.execute("SELECT * FROM resolved_segments ORDER BY start,id")
             while rows := cursor.fetchmany(256):
                 yield from (self._segment(row) for row in rows)
         finally:
             connection.close()
 
+    def segment_by_id(self, segment_id: str) -> Segment | None:
+        with self._lock:
+            row = self._db.execute("SELECT * FROM resolved_segments WHERE id=?", (segment_id,)).fetchone()
+            return self._segment(row) if row is not None else None
+
     def recent(self, limit: int = 500) -> list[Segment]:
         limit = max(0, min(int(limit), 2000))
         with self._lock:
-            rows = self._db.execute("SELECT * FROM segments ORDER BY start DESC,id DESC LIMIT ?", (limit,)).fetchall()
+            rows = self._db.execute("SELECT * FROM resolved_segments ORDER BY start DESC,id DESC LIMIT ?", (limit,)).fetchall()
         return [self._segment(row) for row in reversed(rows)]
 
     def gap(self, speaker_id: str, start: float, end: float, reason: str, source_epoch: str = "0") -> None:
@@ -151,6 +256,8 @@ class Store:
         with self._lock, self._db:
             self._db.execute("INSERT INTO gaps(speaker_id,start,end,reason,source_epoch) VALUES (?,?,?,?,?)",
                              (speaker_id, start, end, reason[:128], source_epoch))
+            changes = self._refresh_gap_fills(source_epoch, start, end)
+        self._log_fill_changes(changes)
 
     def iter_gaps(self) -> Iterator[Gap]:
         # Fetch a bounded batch at a time; gaps are audit information, not audio.
@@ -180,7 +287,7 @@ class Store:
         """Observed speaker/name snapshots, grouped by actual source identity."""
         with self._lock:
             cursor = self._db.execute("""SELECT speaker_id,source_epoch,display_name,
-                MIN(start) AS first_speech,MAX(end) AS last_speech FROM segments
+                MIN(start) AS first_speech,MAX(end) AS last_speech FROM resolved_segments
                 GROUP BY speaker_id,source_epoch,display_name ORDER BY first_speech""")
         while True:
             with self._lock:

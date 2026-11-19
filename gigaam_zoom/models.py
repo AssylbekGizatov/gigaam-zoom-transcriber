@@ -33,6 +33,7 @@ class Segment:
     status: Literal["preliminary", "final"] = "final"
     source_epoch: str = "0"
     attribution: str = "zoom_source_id"
+    attribution_reason: str = ""  # Original capture decision, including missing/conflicting evidence.
 
 
 @dataclass(frozen=True, slots=True)

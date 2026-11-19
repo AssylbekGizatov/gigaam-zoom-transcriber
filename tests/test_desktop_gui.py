@@ -34,6 +34,52 @@ class DesktopGuiTests(unittest.TestCase):
         self.assertEqual(speaker_status({"evidence": "unexpected_internal_code"}), "Говорящий: Неизвестно")
         self.assertEqual(speaker_status({"name": "Алия", "evidence": "ocr_speaker_view_hint"}), "Говорящий: Алия")
 
+    def test_correct_name_discloses_inference_and_uses_current_stored_name(self):
+        app = self.application()
+        app.root = object()
+        app.table = Mock()
+        app.table.selection.return_value = ("selected",)
+        app.controller.store = Mock()
+        app.controller.store.segment_by_id.return_value = types.SimpleNamespace(
+            id="selected", display_name="Алия", attribution="inferred_gap_fill")
+        app.background = lambda operation: operation()
+        with patch("gigaam_zoom.desktop_gui.simpledialog.askstring", return_value="Ирина") as ask:
+            app.correct_name()
+        self.assertIn("восстановлено по соседним репликам", ask.call_args.args[1])
+        self.assertNotIn("inferred_gap_fill", ask.call_args.args[1])
+        self.assertEqual(ask.call_args.kwargs["initialvalue"], "Алия")
+        app.controller.store.segment_by_id.assert_called_once_with("selected")
+        app.controller.store.recent.assert_not_called()
+        app.controller.store.correct_speaker.assert_called_once_with("selected", "Ирина")
+        self.assertEqual(list(app.events.queue), [("refresh", {})])
+
+    def test_correct_name_preserves_manual_name_and_cancel_does_not_write(self):
+        app = self.application()
+        app.root = object()
+        app.table = Mock()
+        app.table.selection.return_value = ("selected",)
+        app.controller.store = Mock()
+        app.controller.store.segment_by_id.return_value = types.SimpleNamespace(
+            id="selected", display_name="Ранее исправленное имя", attribution="manual")
+        with patch("gigaam_zoom.desktop_gui.simpledialog.askstring", return_value=None) as ask:
+            app.correct_name()
+        self.assertIn("уже исправлено вручную", ask.call_args.args[1])
+        self.assertNotIn("по соседним", ask.call_args.args[1])
+        self.assertEqual(ask.call_args.kwargs["initialvalue"], "Ранее исправленное имя")
+        app.controller.store.correct_speaker.assert_not_called()
+
+    def test_correct_name_accepts_archived_row_without_new_provenance(self):
+        app = self.application()
+        app.root = object()
+        app.table = Mock()
+        app.table.selection.return_value = ("selected",)
+        app.controller.store = Mock()
+        app.controller.store.segment_by_id.return_value = types.SimpleNamespace(id="selected", display_name="Архивное имя")
+        with patch("gigaam_zoom.desktop_gui.simpledialog.askstring", return_value=None) as ask:
+            app.correct_name()
+        self.assertEqual(ask.call_args.args[1], "Имя для выбранной реплики:")
+        self.assertEqual(ask.call_args.kwargs["initialvalue"], "Архивное имя")
+
     def test_native_crash_discards_old_name_in_human_status(self):
         for code in ("ocr_worker_crashed", "ocr_worker_exited", "ocr_worker_start_failed"):
             message = speaker_status({"name": "Предыдущее имя", "evidence": code})

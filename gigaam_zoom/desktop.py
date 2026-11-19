@@ -137,6 +137,8 @@ class DesktopController:
 
     def _run(self, settings, loopback_device, microphone_device):
         engine = None
+        timeline = None
+        observer_subscribed = False
         try:
             from .desktop_audio import DesktopCapture
             from .desktop_attribution import Timeline, DesktopSegmenter
@@ -161,7 +163,8 @@ class DesktopController:
             }.items():
                 self.store.set_metadata(key, value)
             timeline = Timeline()
-            segmenter = DesktopSegmenter(timeline, local_name=settings.local_name)
+            segmenter = DesktopSegmenter(timeline, local_name=settings.local_name,
+                lookahead_timeout=2.5 if settings.zoom_ocr_region or self.observer_factory else 0)
             self.pipeline = Pipeline(self.store, engine, self._pipeline_event, origin_ms=origin,
                                      max_pending_seconds=24, segmenter=segmenter)
             self.pipeline.start()
@@ -179,6 +182,9 @@ class DesktopController:
                 self.observer = (self.observer_factory() if self.observer_factory else
                                  ZoomSpeakerObserver(visual_config=settings.visual_config(),
                                                      verbose=settings.verbose_logging))
+                if callable(getattr(self.observer, "subscribe", None)):
+                    self.observer.subscribe(timeline.add)
+                    observer_subscribed = True
                 self.observer.start()
             else:
                 self.emit("speaker", {"name": None, "evidence": "ocr_not_calibrated"})
@@ -195,7 +201,10 @@ class DesktopController:
             while not self._cancel.wait(.2):
                 if self.observer:
                     observation = self.observer.latest()
-                    if observation != last_observation:
+                    if not observer_subscribed and observation != last_observation:
+                        # Compatibility for externally injected observers. The
+                        # real observer delivers every frame independently of
+                        # this GUI-rate status loop, without latest() age gates.
                         timeline.add(observation)
                         last_observation = observation
                     audible = timeline.remote_active_now()
@@ -216,12 +225,24 @@ class DesktopController:
             self.emit("error", {"message": self.failure})
         finally:
             self.emit("status", {"message": "Остановка захвата и завершение принятого текста…"})
-            for component in (self.capture, self.observer):
-                if component:
-                    try:
-                        component.stop()
-                    except Exception:
-                        self.failure = self.failure or "Не удалось корректно закрыть источник звука."
+            if self.capture:
+                try:
+                    self.capture.stop()
+                except Exception:
+                    self.failure = self.failure or "Не удалось корректно закрыть источник звука."
+            if timeline:
+                timeline.finish_audio()
+                if self.observer and observer_subscribed:
+                    # A final delayed Zoom label may arrive after audio stops.
+                    # This bounded wait runs on the session thread, not Tk.
+                    timeline.wait_for_tail(2.5)
+            if self.observer:
+                try:
+                    self.observer.stop()
+                except Exception:
+                    self.failure = self.failure or "Не удалось корректно закрыть источник имён."
+            if timeline:
+                timeline.close()
             try:
                 if self.pipeline:
                     self.pipeline.stop()
