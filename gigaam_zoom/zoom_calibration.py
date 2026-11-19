@@ -408,6 +408,9 @@ def begin_calibration(parent, on_finished, *, language="ru-RU"):
     def fail(exc):
         clear_countdown()
         log_exception("calibration_error", exc)
+        code = getattr(exc, "code", None)
+        if code:
+            _log("calibration_failed", evidence=code)
         # A modal error must not be owned by an unmapped parent on Windows.
         if parent.state() == "withdrawn":
             parent.state(original_state)

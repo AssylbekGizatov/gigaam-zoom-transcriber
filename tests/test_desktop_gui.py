@@ -3,9 +3,9 @@ import queue
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from gigaam_zoom.desktop_gui import DesktopApplication, speaker_status
+from gigaam_zoom.desktop_gui import DesktopApplication, select_ocr_language, speaker_status
 
 
 class Value:
@@ -33,6 +33,71 @@ class DesktopGuiTests(unittest.TestCase):
         self.assertNotIn("ocr_", message)
         self.assertEqual(speaker_status({"evidence": "unexpected_internal_code"}), "Говорящий: Неизвестно")
         self.assertEqual(speaker_status({"name": "Алия", "evidence": "ocr_speaker_view_hint"}), "Говорящий: Алия")
+
+    def test_native_crash_discards_old_name_in_human_status(self):
+        for code in ("ocr_worker_crashed", "ocr_worker_exited", "ocr_worker_start_failed"):
+            message = speaker_status({"name": "Предыдущее имя", "evidence": code})
+            self.assertIn("OCR недоступен", message)
+            self.assertNotIn("Предыдущее имя", message)
+            self.assertNotIn(code, message)
+
+    def test_first_map_defers_one_probe_until_idle_and_ignores_child_maps(self):
+        app = self.application()
+        app.root = Mock()
+        app.first_run_complete = True
+        app._startup_probe_scheduled = False
+        app._map_binding = "map-callback"
+        with patch("gigaam_zoom.desktop_gui.breadcrumb"):
+            app._on_first_map(types.SimpleNamespace(widget=object()))
+            app.root.after_idle.assert_not_called()
+            app._on_first_map(types.SimpleNamespace(widget=app.root))
+            app._on_first_map(types.SimpleNamespace(widget=app.root))
+        app.root.after_idle.assert_called_once_with(app._first_refresh)
+        app.root.unbind.assert_called_once_with("<Map>", "map-callback")
+
+    def test_language_defaults_to_russian_but_keeps_an_explicit_installed_choice(self):
+        self.assertEqual(select_ocr_language(["en-US", "ru"]), "ru")
+        self.assertEqual(select_ocr_language(["en-US", "ru-RU"], "en-US"), "en-US")
+        self.assertEqual(select_ocr_language(["en-US", "ru-RU"], "ru-ru"), "ru-RU")
+        self.assertEqual(select_ocr_language(["fr-FR", "en-US"]), "en-US")
+
+    def test_probe_crash_is_visible_without_clearing_saved_language(self):
+        app = self.application()
+        app.ocr_language = Value("en-US")
+        app.language_combo = {}
+        app.language_status = Value("")
+        app.zoom_status = Value("")
+        app.status = Value("")
+        app.speaker = Value("Говорящий: Предыдущее имя")
+        app.update_checklist = Mock()
+        app._apply_environment_probe({"languages": [], "zoom_found": False,
+                                      "evidence": "ocr_worker_crashed", "exit_code": -1073741819})
+        self.assertIn("OCR недоступен", app.status.get())
+        self.assertEqual(app.speaker.get(), "Говорящий: Неизвестно")
+        self.assertEqual(app.ocr_language.get(), "en-US")
+        self.assertNotIn("1073741819", app.status.get())
+
+    def test_environment_refresh_uses_isolated_probe(self):
+        app = self.application()
+        app.background = lambda operation: operation()
+        result = {"languages": ["ru"], "zoom_found": True}
+        with patch("gigaam_zoom.startup_probe.probe_environment", return_value=result) as probe, \
+                patch("gigaam_zoom.desktop_gui.list_devices", return_value=[]):
+            app.refresh_environment()
+        probe.assert_called_once_with()
+        self.assertEqual(list(app.events.queue), [("devices", []), ("environment_probe", result)])
+
+    def test_show_zoom_focus_failure_gives_manual_switch_instruction(self):
+        from gigaam_zoom.zoom_window import WindowProbeError
+        app = self.application()
+        app.background = lambda operation: operation()
+        with patch("gigaam_zoom.zoom_window.bring_meeting_to_front", side_effect=WindowProbeError("ocr_focus_failed")), \
+                patch("gigaam_zoom.desktop_gui.log_event") as log:
+            app.show_zoom()
+        events = list(app.events.queue)
+        self.assertIn("переключитесь", events[-1][1]["message"])
+        self.assertNotIn("ocr_focus_failed", events[-1][1]["message"])
+        log.assert_called_once_with("zoom_window_check", evidence="ocr_focus_failed")
 
     def test_background_error_reaches_tk_queue_without_exposing_exception_text(self):
         app = self.application()

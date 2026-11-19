@@ -89,11 +89,6 @@ def _print_json(value):
         print(json.dumps(value, ensure_ascii=True), flush=True)
 
 
-def _installed_languages():
-    from gigaam_zoom.zoom_visual import installed_ocr_languages
-    return installed_ocr_languages()
-
-
 def main(argv=None) -> int:
     args = parse_args(argv)
     if sys.platform != "win32":
@@ -101,14 +96,13 @@ def main(argv=None) -> int:
         print("Zoom name diagnostics require Windows with the desktop Zoom client.", file=sys.stderr)
         return 2
     if args.list_languages:
-        try:
-            _print_json({"ocr_languages": _installed_languages()})
-            return 0
-        except Exception as error:
-            _print_json({"evidence": "ocr_unavailable", "error_type": type(error).__name__})
-            print("Install requirements-desktop.txt and an approved Windows OCR language pack.",
-                  file=sys.stderr)
+        from gigaam_zoom.startup_probe import probe_environment
+        result = probe_environment()
+        if result.get("evidence"):
+            _print_json({k: result[k] for k in ("evidence", "exit_code") if k in result})
             return 2
+        _print_json({"ocr_languages": result["languages"]})
+        return 0
 
     from gigaam_zoom.speaker_observer import ZoomSpeakerObserver
     from gigaam_zoom.zoom_visual import VisualSpeakerConfig

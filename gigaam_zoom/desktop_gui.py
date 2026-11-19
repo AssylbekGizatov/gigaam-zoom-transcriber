@@ -10,15 +10,28 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .desktop import DesktopController, DesktopSettings
-from .app_log import log_event, log_exception, log_directory, set_verbose_logging
+from .app_log import breadcrumb, log_event, log_exception, log_directory, set_verbose_logging
 from .desktop_audio import list_devices
 from .exports import default_export_name, export_transcript, format_time
 from .store import Store
 
 
+_OCR_UNAVAILABLE = frozenset({
+    "ocr_worker_crashed", "ocr_worker_exited", "ocr_worker_start_failed", "ocr_timeout",
+    "ocr_unavailable", "ocr_dependency_missing", "ocr_language_unavailable", "ocr_windows_only",
+})
+
+
+def select_ocr_language(languages, current=""):
+    """Keep a saved installed choice; otherwise prefer Russian, then English."""
+    from .zoom_visual import preferred_ocr_language
+    saved = next((tag for tag in languages if tag.casefold() == current.casefold()), "")
+    return saved or preferred_ocr_language(languages)
+
+
 def speaker_status(payload):
     name, reason = payload.get("name"), payload.get("evidence", "")
-    if name:
+    if name and reason not in _OCR_UNAVAILABLE:
         return f"Говорящий: {name}"
     messages = {
         "ocr_not_calibrated": "Говорящий: Неизвестно — выберите область имени",
@@ -29,6 +42,9 @@ def speaker_status(payload):
         "ocr_name_ambiguous": "В области несколько имён; выделите одну подпись",
         "ocr_name_ui_only": "В области кнопки Zoom; выделите только имя",
         "ocr_unavailable": "OCR недоступен; проверьте зависимости Windows",
+        "ocr_worker_crashed": "OCR недоступен: процесс распознавания завершился с ошибкой",
+        "ocr_worker_exited": "OCR недоступен: процесс распознавания неожиданно остановился",
+        "ocr_worker_start_failed": "OCR недоступен: не удалось запустить процесс распознавания",
         "ocr_dependency_missing": "OCR недоступен: установите зависимости по разделу «Помощь»",
         "ocr_windows_only": "OCR доступен только в Windows",
         "ocr_dpi_unavailable": "Не удалось определить масштаб экрана Windows",
@@ -72,6 +88,7 @@ class DesktopApplication:
         self.devices = []
         self.dirty = True
         self.snapshot_busy = False
+        breadcrumb("gui_load_settings")
         try:
             config = DesktopSettings.load()
         except (ValueError, OSError) as error:
@@ -106,6 +123,7 @@ class DesktopApplication:
         self.speaker = tk.StringVar(value="Имя говорящего: ещё не проверено")
         self.metrics = tk.StringVar(value="Аудио и видео не сохраняются · модель работает локально")
         self.format = tk.StringVar(value=config.export_format if config.export_format in {"DOCX", "PDF", "TXT"} else "DOCX")
+        breadcrumb("gui_build_widgets")
         self._build()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll)
@@ -113,17 +131,40 @@ class DesktopApplication:
         self._previous_thread_hook = threading.excepthook
         self._thread_hook = self.thread_exception
         threading.excepthook = self._thread_hook
+        breadcrumb("gui_check_model")
         self.update_checklist()
-        root.after(200, self.refresh_environment)
+        self._startup_probe_scheduled = False
+        self._map_binding = root.bind("<Map>", self._on_first_map, add="+")
+        if root.winfo_ismapped():
+            self._on_first_map()
+
+    def _on_first_map(self, event=None):
+        if event is not None and event.widget is not self.root:
+            return
+        if self._startup_probe_scheduled or self.closing:
+            return
+        self._startup_probe_scheduled = True
+        self.root.unbind("<Map>", self._map_binding)
+        breadcrumb("gui_mapped")
+        self.root.after_idle(self._first_refresh)
         if not self.first_run_complete:
-            root.after(400, self.show_first_run)
+            self.root.after(400, self.show_first_run)
+
+    def _first_refresh(self):
+        if self.closing:
+            return
+        if self.busy or self.controller.running:
+            self.root.after(100, self._first_refresh)
+            return
+        breadcrumb("gui_first_refresh")
+        self.refresh_environment()
 
     def post(self, kind, payload=None):
         item = (kind, payload if payload is not None else {})
         try:
             self.events.put_nowait(item)
         except queue.Full:
-            if kind in {"finished", "error", "operation_done", "ready", "devices", "snapshot", "operation_error", "ocr_languages", "zoom_window", "model_ready"}:
+            if kind in {"finished", "error", "operation_done", "ready", "devices", "snapshot", "operation_error", "zoom_window", "model_ready", "environment_probe"}:
                 try:
                     self.events.get_nowait()
                     self.events.put_nowait(item)
@@ -312,30 +353,52 @@ class DesktopApplication:
 
     def refresh_environment(self):
         def inspect():
-            from .zoom_visual import installed_ocr_languages
-            from .zoom_window import find_meeting_window
+            from .startup_probe import probe_environment
+            breadcrumb("enumerate_audio_devices")
             try:
                 self.post("devices", list_devices())
             except Exception as error:
                 log_exception("audio_devices_error", error)
                 self.post("device_status", "Не удалось получить аудиоустройства. Нажмите «Обновить».")
             try:
-                languages = installed_ocr_languages()
-                self.post("ocr_languages", {"languages": languages})
+                self.post("environment_probe", probe_environment())
             except Exception as error:
-                log_exception("ocr_languages_error", error)
-                self.post("ocr_languages", {"languages": [], "error": True})
-            try:
-                meeting = find_meeting_window()
-                log_event("zoom_window_detected", client_rect=meeting.client_bounds, dpi=meeting.dpi)
-                self.post("zoom_window", {"found": True})
-            except Exception as error:
-                code = getattr(error, "code", "ocr_window_unavailable")
-                log_event("zoom_window_check", evidence=code)
-                if not hasattr(error, "code"):
-                    log_exception("zoom_window_error", error)
-                self.post("zoom_window", {"found": False, "evidence": code})
+                log_exception("startup_probe_failed", error)
+                self.post("environment_probe", {"languages": [], "zoom_found": False,
+                                                 "evidence": "ocr_unavailable",
+                                                 "zoom_evidence": "ocr_window_unavailable"})
         self.background(inspect)
+
+    def _apply_environment_probe(self, result):
+        self.ocr_languages = result.get("languages", [])
+        self.language_combo["values"] = self.ocr_languages
+        selected = select_ocr_language(self.ocr_languages, self.ocr_language.get())
+        # A failed probe must not erase an explicit saved language choice.
+        if selected:
+            self.ocr_language.set(selected)
+        self.zoom_found = result.get("zoom_found", False)
+        self.zoom_status.set("Zoom: окно встречи найдено" if self.zoom_found else
+                             speaker_status({"evidence": result.get("zoom_evidence", "zoom_window_not_found")}))
+        evidence = result.get("evidence", "")
+        if evidence in _OCR_UNAVAILABLE:
+            self._show_ocr_unavailable(evidence)
+        elif not self.ocr_languages:
+            self._show_ocr_unavailable("ocr_language_unavailable")
+        else:
+            self.language_status.set("OCR: язык установлен; выберите область имени")
+            if getattr(self, "_ocr_unavailable", False):
+                self.status.set("Язык OCR доступен. Можно выбрать область имени и начать транскрипцию.")
+                self._ocr_unavailable = False
+        self.update_checklist()
+        log_event("environment_probe_complete", evidence=evidence or result.get("zoom_evidence"))
+
+    def _show_ocr_unavailable(self, evidence):
+        self._ocr_unavailable = True
+        detail = speaker_status({"evidence": evidence})
+        self.speaker.set("Говорящий: Неизвестно")
+        self.language_status.set(detail)
+        self.status.set("OCR недоступен. Транскрипция звука доступна без имён. "
+                        "Проверьте язык Windows и локальные логи.")
 
     def download_model(self):
         if self.busy or self.controller.running:
@@ -363,7 +426,7 @@ class DesktopApplication:
                 code = getattr(error, "code", "ocr_window_unavailable")
                 log_event("zoom_window_check", evidence=code)
                 self.post("zoom_window", {"found": False, "evidence": code})
-                self.post("status", {"message": "Откройте встречу в Zoom Workplace и повторите проверку."})
+                self.post("status", {"message": speaker_status({"evidence": code})})
         self.background(activate)
 
     def open_language_settings(self):
@@ -582,22 +645,22 @@ class DesktopApplication:
                     self.zoom_status.set("Zoom: окно встречи найдено" if self.zoom_found else
                                          speaker_status({"evidence": payload.get("evidence", "zoom_window_not_found")}))
                     self.update_checklist()
-                elif kind == "ocr_languages":
-                    from .zoom_visual import preferred_ocr_language
-                    self.ocr_languages = payload.get("languages", [])
-                    self.language_combo["values"] = self.ocr_languages
-                    if self.ocr_language.get() not in self.ocr_languages:
-                        self.ocr_language.set(preferred_ocr_language(self.ocr_languages) if self.ocr_languages else "")
-                    self.language_status.set("OCR: язык установлен; выберите область имени" if self.ocr_languages else
-                                             "OCR: нет доступных языков. Откройте «Помощь» для настройки Windows; текст доступен без имён.")
-                    self.update_checklist()
+                elif kind == "environment_probe":
+                    self._apply_environment_probe(payload)
                 elif kind == "levels":
                     self.remote_meter["value"] = payload.get("remote", 0)
                     self.mic_meter["value"] = payload.get("microphone", 0)
                 elif kind == "speaker":
                     self.speaker.set(speaker_status(payload))
                     reason = payload.get("evidence", "")
-                    if reason == "ocr_window_minimized":
+                    if reason == "ocr_speaker_view_hint" and getattr(self, "_ocr_unavailable", False):
+                        self._ocr_unavailable = False
+                        self.language_status.set("OCR: чтение имени восстановлено")
+                        self.status.set("Идёт транскрипция. Чтение имён OCR восстановлено.")
+                    if reason in _OCR_UNAVAILABLE:
+                        self._show_ocr_unavailable(reason)
+                        self.zoom_status.set("Zoom: OCR недоступен")
+                    elif reason == "ocr_window_minimized":
                         self.zoom_status.set("Zoom: свёрнут")
                     elif reason in {"ocr_region_occluded", "ocr_capture_blank"}:
                         self.zoom_status.set("Zoom: область перекрыта или пуста")
@@ -678,6 +741,9 @@ class DesktopApplication:
 def main():
     import multiprocessing
     multiprocessing.freeze_support()
+    breadcrumb("gui_before_tk")
     root = tk.Tk()
+    breadcrumb("gui_before_application")
     DesktopApplication(root)
+    breadcrumb("gui_before_mainloop")
     root.mainloop()

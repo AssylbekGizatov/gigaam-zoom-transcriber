@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import multiprocessing as mp
+from multiprocessing.connection import wait as wait_connections
+import math
 import threading
 import time
 import uuid
 
-from .app_log import log_ocr_frame, log_exception
+from .app_log import log_ocr_frame, log_exception, log_event
 
 
 def monotonic_ms() -> int:
@@ -26,16 +28,29 @@ def unknown(reason: str, now: int | None = None) -> SpeakerObservation:
     return SpeakerObservation(monotonic_ms() if now is None else now, "local:zoom-ocr:unknown", None, reason)
 
 
+class _WorkerExited(Exception):
+    """The OS process sentinel fired, independently of pipe readability."""
+
+
 class ZoomSpeakerObserver:
     """GUI reads never wait on a native OCR call. Hung providers are restarted."""
 
     def __init__(self, *, visual_config, poll_interval=.75, probe_timeout=15.0,
-                 verbose=False, log_samples=True, _worker=None):
+                 verbose=False, log_samples=True, retry_initial_delay=1.0,
+                 retry_max_delay=30.0, _worker=None):
         from .zoom_visual import _visual_worker
         visual_config.validate()
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               or not math.isfinite(value) or value <= 0
+               for value in (poll_interval, probe_timeout, retry_initial_delay, retry_max_delay)):
+            raise ValueError("OCR polling, timeout and retry delays must be positive finite numbers")
+        if retry_max_delay < retry_initial_delay:
+            raise ValueError("Maximum retry delay cannot be shorter than the initial delay")
         self.config = visual_config
         self.poll_interval = poll_interval
         self.probe_timeout = probe_timeout
+        self.retry_initial_delay = retry_initial_delay
+        self.retry_max_delay = retry_max_delay
         self._worker = _worker or _visual_worker
         self._verbose = verbose
         self._log = log_samples
@@ -61,6 +76,7 @@ class ZoomSpeakerObserver:
     def start(self):
         if self._thread is None or not self._thread.is_alive():
             self._stop.clear()
+            self._set(None, unknown("ocr_not_started"))
             self._thread = threading.Thread(target=self._run, name="zoom-speaker", daemon=True)
             self._thread.start()
 
@@ -74,44 +90,144 @@ class ZoomSpeakerObserver:
         with self._lock:
             self._frame, self._observation = frame, observation
 
+    def _publish(self, frame, observation):
+        with self._lock:
+            if not self._stop.is_set():
+                self._frame, self._observation = frame, observation
+
+    def _retry_delay(self, failures):
+        return min(self.retry_max_delay, self.retry_initial_delay * 2 ** min(max(0, failures - 1), 16))
+
+    def _receive_frame(self, process, connection, deadline):
+        """Watch process death even if EOF and the Windows exit code race."""
+        while not self._stop.is_set():
+            remaining = deadline - time.monotonic()
+            ready = wait_connections((connection, process.sentinel), timeout=max(0, min(.05, remaining)))
+            # Process death takes priority over a buffered result. A name from
+            # a dead worker must not remain current while it is restarted.
+            if process.sentinel in ready or process.exitcode is not None:
+                raise _WorkerExited
+            if connection in ready:
+                frame = connection.recv()
+                if process.exitcode is not None:
+                    raise _WorkerExited
+                return frame
+            if remaining <= 0:
+                raise TimeoutError
+        return None
+
+    def _wait_between_samples(self, process, duration):
+        deadline = time.monotonic() + duration
+        while not self._stop.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            if wait_connections((process.sentinel,), timeout=min(.05, remaining)):
+                raise _WorkerExited
+
+    def _unexpected_exit_code(self, process, error):
+        """Observe the native status BEFORE any intentional terminate/kill.
+
+        A pipe can close slightly before Windows publishes the process exit
+        status. Give that transition an interruptible grace period. A live
+        process with a broken protocol is unavailable, not an invented crash.
+        """
+        if process.pid is None:
+            return None
+        if isinstance(error, (_WorkerExited, EOFError, BrokenPipeError, OSError)):
+            deadline = time.monotonic() + 1.0
+            while process.exitcode is None and not self._stop.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                if wait_connections((process.sentinel,), timeout=min(.05, remaining)):
+                    break
+        process.join(timeout=0)
+        return process.exitcode
+
+    @staticmethod
+    def _dispose(process, connection, child):
+        child.close()
+        try:
+            if process.pid is not None:
+                # Normal stop lets an idle worker balance COM initialization.
+                # A blocked native call is still forcibly bounded below.
+                if process.is_alive():
+                    try:
+                        connection.send("stop")
+                    except (EOFError, BrokenPipeError, OSError):
+                        pass
+                process.join(.15)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(.5)
+                if process.is_alive():
+                    process.kill()
+                    process.join(.5)
+        finally:
+            connection.close()
+            if not process.is_alive():
+                process.close()
+
     def _run(self):
         ctx = mp.get_context("spawn")
+        failures = 0
         while not self._stop.is_set():
             connection, child = ctx.Pipe()
             process = ctx.Process(target=self._worker,
                                   args=(child, self._session_id, self.config, self._verbose), daemon=True)
+            spawned_at = time.monotonic()
+            frames_received = 0
+            retry_delay = self.retry_initial_delay
             try:
                 process.start()
                 child.close()
                 while not self._stop.is_set():
                     start = time.monotonic()
                     connection.send("sample")
-                    while not connection.poll(.05):
-                        if self._stop.is_set():
-                            return
-                        if time.monotonic() - start > self.probe_timeout:
-                            raise TimeoutError
-                    frame = connection.recv()
-                    self._set(frame, frame.observation)
+                    frame = self._receive_frame(process, connection, start + self.probe_timeout)
+                    if self._stop.is_set():
+                        break
+                    from .zoom_visual import VisualFrame
+                    if not isinstance(frame, VisualFrame) or not isinstance(frame.observation, SpeakerObservation):
+                        raise ValueError("Invalid OCR worker response")
+                    self._publish(frame, frame.observation)
+                    frames_received += 1
+                    # One good frame followed by a native crash must not reset
+                    # backoff and cause an endless one-process-per-second loop.
+                    if frames_received >= 3 and time.monotonic() - spawned_at >= 30:
+                        failures = 0
                     if self._log:
                         log_ocr_frame(frame)
-                    self._stop.wait(max(0, self.poll_interval - (time.monotonic() - start)))
+                    self._wait_between_samples(process, max(0, self.poll_interval - (time.monotonic() - start)))
             except Exception as error:
-                reason = "ocr_timeout" if isinstance(error, TimeoutError) else "ocr_unavailable"
-                self._set(None, unknown(reason))
-                if self._log:
-                    log_exception(reason, error)
+                if not self._stop.is_set():
+                    # Clear a previous name as soon as the channel fails; do
+                    # not keep it visible during the exit-status grace period.
+                    self._publish(None, unknown("ocr_timeout" if isinstance(error, TimeoutError)
+                                                else "ocr_unavailable"))
+                    # Timeout is an intentional watchdog termination. Never
+                    # misreport the ensuing terminate() exit status as a crash.
+                    exit_code = None if isinstance(error, TimeoutError) else self._unexpected_exit_code(process, error)
+                    if process.pid is None:
+                        reason = "ocr_worker_start_failed"
+                    elif isinstance(error, TimeoutError):
+                        reason = "ocr_timeout"
+                    elif exit_code is not None:
+                        reason = "ocr_worker_crashed" if exit_code != 0 else "ocr_worker_exited"
+                    else:
+                        reason = "ocr_unavailable"
+                    failures += 1
+                    retry_delay = self._retry_delay(failures)
+                    self._publish(None, unknown(reason))
+                    # log_samples controls OCR content/telemetry only. Safe
+                    # infrastructure failures must also reach preview logs.
+                    if not self._stop.is_set():
+                        if exit_code is not None:
+                            log_event(reason, exit_code=exit_code, retry_count=failures,
+                                      retry_delay_ms=round(retry_delay * 1000))
+                        else:
+                            log_exception(reason, error)
             finally:
-                child.close()
-                connection.close()
-                if process.pid is not None:
-                    process.join(.15)
-                    if process.is_alive():
-                        process.terminate()
-                        process.join(.5)
-                    if process.is_alive():
-                        process.kill()
-                        process.join(.5)
-                if not process.is_alive():
-                    process.close()
-            self._stop.wait(.5)
+                self._dispose(process, connection, child)
+            self._stop.wait(retry_delay)
