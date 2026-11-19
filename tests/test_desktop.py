@@ -344,7 +344,7 @@ class AttributionPersistenceTests(unittest.TestCase):
             store = Store(path)
             try:
                 self.assertEqual(store.recent()[0].attribution, "zoom_source_id")
-                self.assertEqual(store.get_metadata("schema_version"), 2)
+                self.assertEqual(store.get_metadata("schema_version"), 3)
                 store.set_metadata("capture_mode", "desktop_loopback")
                 store.upsert(Segment("new", "local:zoom-ocr:fixture", "Алия",
                                      2, 3, "Қазақ Русский English", "final", "desktop", "zoom_ocr_hint"))

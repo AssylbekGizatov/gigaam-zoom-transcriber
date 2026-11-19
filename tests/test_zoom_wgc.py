@@ -126,8 +126,10 @@ def test_discards_buffered_frames_from_before_new_request(monkeypatch):
         pass
     pools[0].pending.append(frame_type(time.perf_counter() - 20))
     requested = time.perf_counter()
+    requested_ms = time.monotonic() * 1000
     with capture.capture_window(100, .2) as result:
         assert result.info["wgc_system_relative_time_ms"] >= requested * 1000 - 1
+        assert requested_ms - 1 <= result.info["captured_at_ms"] <= time.monotonic() * 1000 + 1
     capture.close()
     assert calls.count("close:frame") >= 3
 
@@ -180,6 +182,33 @@ def test_failure_during_device_creation_balances_apartment(monkeypatch):
         capture.capture_window(100, .2)
     capture.close()  # Idempotent after failed initialization.
     assert calls == ["init", "uninit"]
+
+
+def test_device_close_error_still_closes_loop_and_balances_com(monkeypatch):
+    calls, _, _ = _fake_api(monkeypatch)
+    capture = WgcCapture()
+    with capture.capture_window(100, .2):
+        pass
+    def fail_close():
+        raise OSError("native device was already removed")
+    capture._device = SimpleNamespace(close=fail_close)
+    loop = capture._loop
+    capture.close()
+    assert loop.is_closed()
+    assert calls[-1] == "uninit"
+
+
+def test_inconsistent_future_compositor_clock_is_rejected(monkeypatch):
+    _, pools, frame_type = _fake_api(monkeypatch, frames=False)
+    capture = WgcCapture()
+    try:
+        capture._initialize()
+        capture._start_target(100)
+        pools[0].pending.append(frame_type(time.perf_counter() + 100))
+        with pytest.raises(WgcError, match="wgc_invalid_frame_time"):
+            capture.capture_window(100, .2)
+    finally:
+        capture.close()
 
 
 @pytest.fixture

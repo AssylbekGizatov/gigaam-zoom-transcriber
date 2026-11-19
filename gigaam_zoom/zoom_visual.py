@@ -76,6 +76,8 @@ class VisualFrame:
     word_count: int = 0
     image_png: bytes | None = None
     error_info: dict | None = None
+    capture_method: str = ""
+    capture_attempts: tuple[dict, ...] = ()
 
     def diagnostic_dict(self) -> dict:
         result = asdict(self)
@@ -166,7 +168,7 @@ class NameStabilizer:
         self._previous = (name, at_ms)
         if (previous is None or previous[0] != name
                 or not 0 < at_ms - previous[1] <= max_gap_ms):
-            return _unknown(at_ms, "ocr_confirming")
+            return SpeakerObservation(at_ms, UNKNOWN_SOURCE_ID, None, "ocr_confirming", recognized_name=name)
         digest = hashlib.sha256((self.session_id + "\0" + name).encode("utf-8")).hexdigest()[:20]
         return SpeakerObservation(at_ms, "local:zoom-ocr:" + digest, name, "ocr_speaker_view_hint")
 
@@ -189,36 +191,28 @@ def region_bounds(bounds: tuple[int, int, int, int], config: VisualSpeakerConfig
     return crop
 
 
-def _capture(config: VisualSpeakerConfig | None = None):
-    from .zoom_window import (
-        WindowProbeError, physical_pixels, find_meeting_window, ensure_region_uncovered,
-    )
-    try:
-        from PIL import ImageGrab
-    except ImportError as error:
-        raise VisualProbeError("ocr_dependency_missing") from error
+def _capture(config: VisualSpeakerConfig | None = None, *, session=None):
+    from .zoom_window import WindowProbeError, physical_pixels, find_meeting_window
+    from .zoom_capture import CaptureSession, CaptureError
+    own_session = session is None
+    session = session or CaptureSession()
     try:
         with physical_pixels():
             window = find_meeting_window()
             bounds = window.client_bounds
             crop = bounds if config is None else region_bounds(bounds, config)
-            ensure_region_uncovered(window.hwnd, crop)
-            at_ms = monotonic_ms()
-            try:
-                image = ImageGrab.grab(bbox=crop, all_screens=True, include_layered_windows=True)
-            except (OSError, ValueError) as error:
-                raise VisualProbeError("ocr_capture_unavailable") from error
-            try:
-                after = find_meeting_window()
-                if after != window:
-                    raise VisualProbeError("ocr_window_changed")
-                ensure_region_uncovered(window.hwnd, crop)
-            except Exception:
-                image.close()
-                raise
-            return image, window, crop, at_ms
-    except WindowProbeError as error:
-        raise VisualProbeError(error.code) from error
+            result = session.capture(window, crop)
+            result.image.info["capture_method"] = result.method
+            result.image.info["capture_attempts"] = result.attempts
+            return result.image, window, crop, result.at_ms
+    except (WindowProbeError, CaptureError) as error:
+        translated = VisualProbeError(error.code)
+        translated.capture_method = getattr(error, "method", "")
+        translated.capture_attempts = getattr(error, "attempts", ())
+        raise translated from error
+    finally:
+        if own_session:
+            session.close()
 
 
 def preferred_ocr_language(tags: list[str]) -> str:
@@ -344,10 +338,12 @@ class VisualSampler:
     """
 
     def __init__(self, config: VisualSpeakerConfig, session_id: str):
+        from .zoom_capture import CaptureSession
         config.validate()
         self.config = config
         self.stabilizer = NameStabilizer(session_id)
         self.reader = None
+        self.capture_session = CaptureSession()
         self.loop = asyncio.new_event_loop()
         self.latency_ms = 0.0
         self._geometry = None
@@ -355,6 +351,7 @@ class VisualSampler:
                                 if config.client_size is not None else None)
 
     def close(self) -> None:
+        self.capture_session.close()
         if self.reader is not None:
             self.reader.close()
             self.reader = None
@@ -370,6 +367,8 @@ class VisualSampler:
         reading = OcrReading((), 0)
         reason = "not_run"
         error_info = None
+        capture_method = ""
+        capture_attempts = ()
         language = self.config.language
         timings = {"capture_ms": 0.0, "ocr_ms": 0.0}
         max_age = adaptive_max_age_ms(self.latency_ms)
@@ -378,7 +377,10 @@ class VisualSampler:
                 raise VisualProbeError("ocr_windows_only")
             capture_started = time.perf_counter()
             try:
-                image, window, crop, at_ms = _capture(self.config)
+                image, window, crop, at_ms = _capture(self.config, session=self.capture_session)
+                capture_info = getattr(image, "info", {})
+                capture_method = capture_info.get("capture_method", "")
+                capture_attempts = capture_info.get("capture_attempts", ())
             finally:
                 timings["capture_ms"] = round((time.perf_counter() - capture_started) * 1000, 3)
             window_info = {
@@ -427,6 +429,8 @@ class VisualSampler:
                 raise VisualProbeError("ocr_name_clipped")
             observation = self.stabilizer.observe(list(reading.lines), at_ms, max_gap_ms=max_age)
         except VisualProbeError as error:
+            capture_method = getattr(error, "capture_method", capture_method)
+            capture_attempts = getattr(error, "capture_attempts", capture_attempts)
             self.stabilizer.reset()
             reason = error.code
             observation = _unknown(at_ms, error.code)
@@ -446,7 +450,7 @@ class VisualSampler:
             parser_reason=reason, timings=timings, window=window_info, crop_bounds=crop,
             image_size=size, language=language, max_age_ms=max_age,
             line_count=len(reading.lines), word_count=reading.word_count, image_png=png,
-            error_info=error_info)
+            error_info=error_info, capture_method=capture_method, capture_attempts=capture_attempts)
 
 
 def _visual_worker(connection, session_id: str, config: VisualSpeakerConfig, verbose: bool = False) -> None:

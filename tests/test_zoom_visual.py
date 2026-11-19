@@ -84,16 +84,16 @@ def test_geometry_handles_negative_monitor_origin_and_window_resize():
 
 
 def test_capture_closes_image_when_window_changes(monkeypatch):
-    pytest.importorskip("PIL.ImageGrab")
-    from PIL import ImageGrab
+    from gigaam_zoom import zoom_capture
     closed = []
     fake_image = SimpleNamespace(close=lambda: closed.append(True))
-    positions = iter([MeetingWindow(1, 2, "Zoom Meeting", "class", (0, 0, 1000, 500), "monitor1", 96),
-                      MeetingWindow(1, 2, "Zoom Meeting", "class", (10, 0, 1010, 500), "monitor1", 96)])
+    window = [MeetingWindow(1, 2, "Zoom Meeting", "class", (0, 0, 1000, 500), "monitor1", 96)]
+    def native_capture(self, method, selected, crop):
+        window[0] = MeetingWindow(1, 2, "Zoom Meeting", "class", (10, 0, 1010, 500), "monitor1", 96)
+        return fake_image, 1000
     monkeypatch.setattr(zoom_window, "physical_pixels", nullcontext)
-    monkeypatch.setattr(zoom_window, "find_meeting_window", lambda: next(positions))
-    monkeypatch.setattr(zoom_window, "ensure_region_uncovered", lambda *args: None)
-    monkeypatch.setattr(ImageGrab, "grab", lambda **kwargs: fake_image)
+    monkeypatch.setattr(zoom_window, "find_meeting_window", lambda: window[0])
+    monkeypatch.setattr(zoom_capture.CaptureSession, "_native_capture", native_capture)
     with pytest.raises(VisualProbeError, match="ocr_window_changed"):
         module._capture(VisualSpeakerConfig((0, 0, .5, .1)))
     assert closed == [True]
@@ -174,7 +174,7 @@ def test_worker_invalidates_confirmed_name_after_capture_failure(monkeypatch):
     times = iter([1000, 1500, 2000, 2500, 3000])
     clock = [1000]
 
-    def capture(config):
+    def capture(config, **kwargs):
         at_ms = next(times)
         clock[0] = at_ms
         if at_ms == 2000:
@@ -243,7 +243,7 @@ def _sampler_fixture(monkeypatch, *, blank=False, latency=2500, clipped=False):
     window = [MeetingWindow(1, 2, "Zoom Meeting", "class", (0, 0, 1000, 500), "monitor1", 96)]
     calls = []
 
-    def capture(config):
+    def capture(config, **kwargs):
         crop = region_bounds(window[0].client_bounds, config)
         image = Image.new("RGB", (crop[2] - crop[0], crop[3] - crop[1]), "black")
         if not blank:

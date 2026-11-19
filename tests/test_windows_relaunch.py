@@ -145,13 +145,33 @@ using System.Reflection;
 [assembly: AssemblyVersion("7.1.5.43453")]
 [assembly: AssemblyFileVersion("7.1.5.43453")]
 static class StartupFixture {
-    [STAThread] static void Main() {
+    [STAThread] static void Main(string[] args) {
         Application.EnableVisualStyles();
         var window = new Form();
         window.Text = "Zoom Meeting";
         window.ClientSize = new Size(1000, 600);
         window.StartPosition = FormStartPosition.Manual;
         window.Location = new Point(20, 20);
+        if (Array.IndexOf(args, "--covered") >= 0) {
+            var label = new Label();
+            label.Dock = DockStyle.Fill;
+            label.BackColor = Color.White;
+            label.ForeColor = Color.Black;
+            label.Font = new Font("Segoe UI", 36);
+            label.TextAlign = ContentAlignment.MiddleCenter;
+            label.Text = "Anna Miller";
+            window.Controls.Add(label);
+            window.Shown += delegate {
+                var cover = new Form();
+                cover.Text = "Opaque fixture cover";
+                cover.FormBorderStyle = FormBorderStyle.None;
+                cover.StartPosition = FormStartPosition.Manual;
+                cover.Bounds = window.Bounds;
+                cover.BackColor = Color.Blue;
+                cover.TopMost = true;
+                cover.Show();
+            };
+        }
         Application.Run(window);
     }
 }
@@ -169,6 +189,36 @@ static class StartupFixture {
                             cwd=folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
     assert result.returncode == 0, "Could not build the local synthetic Zoom window fixture"
     return NativeWindows(), executable
+
+
+def test_covered_window_name_reaches_observer_from_native_helper(native_fixture):
+    """Exercise HWND selection, nested helper, client crop and real Windows OCR together."""
+    from gigaam_zoom.speaker_observer import ZoomSpeakerObserver
+    from gigaam_zoom.startup_probe import probe_environment
+    from gigaam_zoom.zoom_visual import VisualSpeakerConfig
+    environment = probe_environment()
+    assert not environment["evidence"], environment["evidence"]
+    if "en-us" not in {tag.casefold() for tag in environment["languages"]}:
+        pytest.skip("Covered-window OCR fixture requires the installed en-US recognizer")
+    native, executable = native_fixture
+    fixture = subprocess.Popen([str(executable), "--covered"])
+    observer = ZoomSpeakerObserver(visual_config=VisualSpeakerConfig((.15, .36, .7, .28), language="en-US"),
+                                   log_samples=False)
+    try:
+        _wait(lambda: native.window({fixture.pid}, "Opaque fixture cover"), process=fixture, timeout=10)
+        observer.start()
+        deadline = time.monotonic() + 18
+        while time.monotonic() < deadline:
+            frame = observer.latest_frame()
+            if frame is not None and frame.observation.display_name == "Anna Miller":
+                assert frame.capture_method in {"wgc", "printwindow"}
+                return
+            time.sleep(.1)
+        details = frame.capture_attempts if frame else ()
+        pytest.fail(f"No confirmed name under opaque cover: {observer.latest().evidence}, {details}")
+    finally:
+        observer.stop()
+        _cleanup(fixture)
 
 
 def _launcher_command(run):

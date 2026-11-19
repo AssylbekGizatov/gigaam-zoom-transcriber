@@ -22,6 +22,18 @@ class SpeakerObservation:
     source_id: str
     display_name: str | None
     evidence: str
+    # Windows.Media.Ocr exposes no numeric recognition confidence.
+    confidence: float | None = None
+    # First reading awaiting confirmation. display_name stays empty until verified.
+    recognized_name: str | None = None
+
+    @property
+    def status(self) -> str:
+        if self.evidence == "ocr_speaker_view_hint" and self.display_name:
+            return "ok"
+        if self.evidence == "ocr_region_occluded":
+            return "occluded"
+        return "missing"
 
 
 def unknown(reason: str, now: int | None = None) -> SpeakerObservation:
@@ -60,6 +72,12 @@ class ZoomSpeakerObserver:
         self._lock = threading.Lock()
         self._frame = None
         self._observation = unknown("ocr_not_started")
+        self._on_observation = None
+
+    def subscribe(self, callback):
+        """Deliver capture-time observations independently of GUI polling."""
+        with self._lock:
+            self._on_observation = callback
 
     def latest_frame(self):
         with self._lock:
@@ -92,8 +110,12 @@ class ZoomSpeakerObserver:
 
     def _publish(self, frame, observation):
         with self._lock:
-            if not self._stop.is_set():
-                self._frame, self._observation = frame, observation
+            if self._stop.is_set():
+                return
+            self._frame, self._observation = frame, observation
+            callback = self._on_observation
+        if callback is not None:
+            callback(observation)
 
     def _retry_delay(self, failures):
         return min(self.retry_max_delay, self.retry_initial_delay * 2 ** min(max(0, failures - 1), 16))

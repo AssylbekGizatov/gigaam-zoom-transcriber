@@ -22,7 +22,9 @@ free-threaded Python. Окно Tcl/Tk можно проверить `py -3.13 -m
 py -3.13 -m pip install --user -r requirements-desktop.txt -c constraints.txt
 ```
 
-Она устанавливает CPU PyTorch, локальный код GigaAM, WASAPI и Windows OCR.
+Она устанавливает CPU PyTorch, локальный код GigaAM, WASAPI, Windows OCR
+и WinRT-модули Windows Graphics Capture. После обновления исходников повторите
+эту же команду для новых зависимостей; веса GigaAM повторно скачивать не нужно.
 При этом нужны доступы к PyPI / files.pythonhosted.org и download.pytorch.org.
 Если организация использует свой каталог пакетов, согласуйте установку с IT;
 не изменяйте Group Policy и не отключайте проверку TLS.
@@ -69,7 +71,7 @@ py -3.13 app.py
 | Нет подходящего колеса пакета | Проверьте 64-bit CPython 3.13, версии из requirements и доступ к индексам. |
 | pip заблокирован / каталог read-only | Нужен согласованный с IT способ установки; обход политики не предусмотрен. |
 | OCR язык недоступен | Выберите установленный язык либо согласуйте компонент Windows OCR с IT. |
-| Имя не появляется | Уберите перекрытие строки имени, проверьте Speaker View и калибровку. |
+| Имя не появляется | Разверните Zoom, проверьте Speaker View, калибровку и `capture_method`/`capture_attempts`. При отказе WGC/PrintWindow уберите перекрытие для screen DC. |
 | Модель не найдена | Проверьте папку в настройках и выполните `acquire_model.py --check`. |
 
 В Visual Studio, VS Code или PyCharm выберите **системный Python 3.13 x64**,

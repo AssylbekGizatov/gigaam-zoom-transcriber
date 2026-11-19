@@ -15,6 +15,20 @@ def _frame():
     return VisualFrame(SpeakerObservation(monotonic_ms(), "local:zoom-ocr:test", "Alice", "ocr_speaker_view_hint"))
 
 
+def test_timeline_sink_receives_every_capture_even_when_live_name_expires():
+    observer = _observer(_native_exit)
+    seen = []
+    observer.subscribe(seen.append)
+    for t, name, evidence in [(1000, "Alice", "ocr_speaker_view_hint"), (1200, None, "ocr_region_occluded"),
+                              (2500, None, "ocr_name_missing"), (3250, "Bob", "ocr_speaker_view_hint")]:
+        obs = SpeakerObservation(t, "local:zoom-ocr:test", name, evidence)
+        observer._publish(VisualFrame(obs), obs)
+    assert observer.latest(6500).display_name is None
+    assert [(o.observed_at_ms, o.status) for o in seen] == [
+        (1000, "ok"), (1200, "occluded"), (2500, "missing"), (3250, "ok")]
+    assert seen[0].confidence is None and seen[3].display_name == "Bob"
+
+
 def _native_exit(connection, session_id, config, verbose):
     connection.recv()
     os._exit(37)
